@@ -4,7 +4,7 @@ import Orb from "@/components/ui/Orb";
 
 const Head: React.FC = () => {
   return (
-    <section className="relative mx-32 mt-16 p-32 bg-gray-900 text-white rounded-xl shadow-xl">
+    <section className="relative mx-32 mt-20 p-32 bg-gray-900 text-white rounded-xl shadow-xl">
       <div className="max-w-7xl mx-auto px-4 py-16 flex flex-col-reverse md:flex-row items-center justify-between">
         {/* Left Text Section */}
         <div className="mt-8 md:mt-0 md:max-w-xl">
