@@ -3,9 +3,12 @@ import React, { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { WarpBackground } from "@/components/ui/warp-background";
+
 // Uncomment the next two lines if you have access to ScrollSmoother
 // import { ScrollSmoother } from "gsap/ScrollSmoother";
 // gsap.registerPlugin(ScrollTrigger, ScrollSmoother);
+
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -84,6 +87,7 @@ const Section = () => {
             </motion.div>
 
             {/* Product Demo */}
+            <WarpBackground>
             <motion.div
               className="relative max-w-4xl mx-auto"
               initial={{ opacity: 0 }}
@@ -150,6 +154,8 @@ const Section = () => {
                 </div>
               </div>
             </motion.div>
+            </WarpBackground>
+           
           </motion.section>
 
           {/* Features Section */}
