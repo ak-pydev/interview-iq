@@ -1,15 +1,17 @@
-import Image from "next/image";
-import GradientText from '../components/ui/GradientText'
-import Navbar from "@/components/Navbar";
+"use client";
+
+import Section from "@/components/Section";
 import Head from "@/components/Head";
+import Footer from "@/components/footer";
+import Image from "next/image";
+import React, { useState, useEffect } from "react";
 
-
-export default function Home() {
+export default function LandingPage() {
   return (
-
-    <div style={{ width: '100%', height: '400px', position: 'relative' }}>
-      <Navbar></Navbar>
-      <Head></Head>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-violet-50 font-sans">
+      <Head />
+      <Section />
+      <Footer />
     </div>
   );
 }
