@@ -71,7 +71,7 @@ const Section = () => {
                 </p>
                 <div className="flex flex-col sm:flex-row justify-center gap-4">
                   <a
-                    href="#"
+                    href="/get-started"
                     className="px-8 py-4 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition duration-300 shadow-lg hover:shadow-xl"
                   >
                     Start Your Career Journey
@@ -123,8 +123,7 @@ const Section = () => {
                     </div>
                     <div className="flex-1 p-4 bg-indigo-800 rounded-lg">
                       <p>
-                        "Tell me about a time you solved a difficult problem at
-                        work."
+                        Tell me about a time you solved a difficult problem at work.
                       </p>
                     </div>
                   </div>
@@ -444,7 +443,7 @@ const Section = () => {
                             </div>
                           </div>
                           <p className="text-gray-600 mb-3">
-                            Here's my feedback on your resume:
+                            Here&apos;s my feedback on your resume:
                           </p>
                           <div className="bg-indigo-50 p-3 rounded-lg text-sm">
                             <p className="mb-2">
@@ -452,7 +451,7 @@ const Section = () => {
                               work. Try using action verbs and quantifiable achievements.
                             </p>
                             <p className="font-medium text-indigo-700">
-                              I've suggested edits that could increase your interview
+                              I&apos;ve suggested edits that could increase your interview
                               chances by 40%.
                             </p>
                           </div>

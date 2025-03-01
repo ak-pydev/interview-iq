@@ -57,12 +57,7 @@ const Head = () => {
           >
             Login
           </a>
-          <a
-            className="text-sm font-medium text-white bg-indigo-600 px-4 py-2 rounded-lg"
-            href="/auth/sign-up"
-          >
-            Get Started
-          </a>
+          
         </SignedOut>
       </div>
 
@@ -128,12 +123,7 @@ const Head = () => {
               >
                 Login
               </a>
-              <a
-                className="text-sm font-medium text-white bg-indigo-600 px-4 py-2 rounded-lg text-center"
-                href="/auth/sign-up"
-              >
-                Get Started
-              </a>
+             
             </SignedOut>
           </div>
         </div>
