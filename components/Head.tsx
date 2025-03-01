@@ -24,8 +24,7 @@ const Head = () => {
       </div>
 
       <div className="hidden md:flex items-center space-x-4">
-        <a className="text-sm font-medium text-gray-600 hover:text-indigo-600" href="#">Login</a>
-        <a className="text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg transition duration-300" href="#">Get Started</a>
+        <a className="text-sm font-medium text-gray-600 hover:text-indigo-600" href="/auth/sign-in">Login</a>
       </div>
 
       {/* Mobile Menu Button */}
