@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Video, 
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 
 export default function MockInterviewPage() {
+  const router = useRouter();
   type TabType = 'behavioral' | 'technical';
   const [activeTab, setActiveTab] = useState<TabType>('behavioral');
   const [isScrolled, setIsScrolled] = useState(false);
@@ -31,6 +33,16 @@ export default function MockInterviewPage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Function to navigate to different interview types
+const navigateToInterview = (type: TabType) => {
+  console.log(`Navigating to: ${type === 'behavioral' ? '/mock-interview/behaviorial-tab' : '/mock-interview/technical-tab'}`);
+  if (type === 'behavioral') {
+    router.push('/mock-interview/behaviorial-tab'); // Updated path to match folder name
+  } else {
+    router.push('/mock-interview/technical-tab'); // Add the parent directory
+  }
+};
+
   // Progress data (for demo purposes)
   const progressData = {
     completed: 3,
@@ -42,31 +54,34 @@ export default function MockInterviewPage() {
 
   // Tab content definition
   const tabContent = {
-  behavioral: {
-    title: "Master Behavioral Interviews",
-    description: "Practice answering STAR-method questions with real-time AI feedback on your communication, structure, and content.",
-    features: [
-      "50+ common behavioral questions across different job levels",
-      "Feedback on your answer structure and delivery",
-      "Industry-specific questions for different roles",
-      "Detailed transcripts and improvement suggestions"
-    ],
-    image: "3d-art/behave-image.webp",
-    cta: "Start Behavioral Practice"
-  },
-  technical: {
-    title: "Ace Technical Interviews",
-    description: "Practice coding problems, system design, and technical concepts with interactive coding environments and explanations.",
-    features: [
-      "Live coding environment with syntax highlighting",
-      "Algorithm and data structure challenges",
-      "System design interview simulations",
-      "Language-specific technical assessments"
-    ],
-    image: "3d-art/hacker_rank.jpg",
-    cta: "Start Technical Practice"
-  }
-};
+    behavioral: {
+      title: "Master Behavioral Interviews",
+      description: "Practice answering STAR-method questions with real-time AI feedback on your communication, structure, and content.",
+      features: [
+        "50+ common behavioral questions across different job levels",
+        "Feedback on your answer structure and delivery",
+        "Industry-specific questions for different roles",
+        "Detailed transcripts and improvement suggestions"
+      ],
+      image: "3d-art/behave-image.webp",
+      cta: "Start Behavioral Practice",
+    path: "/mock-interview/behaviorial-tab"   
+    },
+    technical: {
+      title: "Ace Technical Interviews",
+      description: "Practice coding problems, system design, and technical concepts with interactive coding environments and explanations.",
+      features: [
+        "Live coding environment with syntax highlighting",
+        "Algorithm and data structure challenges",
+        "System design interview simulations",
+        "Language-specific technical assessments"
+      ],
+      image: "3d-art/hacker_rank.jpg",
+      cta: "Start Technical Practice",
+    path: "/mock-interview/technical-tab"
+    }
+  };
+
   // Animation variants
   const fadeIn = {
     hidden: { opacity: 0, y: 20 },
@@ -197,6 +212,7 @@ export default function MockInterviewPage() {
                     animate="pulse"
                     onMouseEnter={() => setHoverButton('start')}
                     onMouseLeave={() => setHoverButton(null)}
+                    onClick={() => navigateToInterview(activeTab)}
                   >
                     <Play className="w-5 h-5" />
                     <span>Start Interview</span>
@@ -347,7 +363,7 @@ export default function MockInterviewPage() {
                 {['behavioral', 'technical'].map((tab) => (
                   <motion.button
                     key={tab}
-                    onClick={() => setActiveTab(tab)}
+                    onClick={() => setActiveTab(tab as TabType)}
                     className={`px-6 py-3 rounded-lg font-medium ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:text-white'}`}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.98 }}
@@ -360,87 +376,88 @@ export default function MockInterviewPage() {
             
             {/* Tab content */}
             <AnimatePresence mode="wait">
-  <motion.div
-    key={activeTab}
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    exit={{ opacity: 0, y: -20 }}
-    transition={{ duration: 0.3 }}
-    className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center"
-  >
-    <div>
-      <h3 className="text-2xl md:text-3xl font-bold mb-4">
-        {tabContent[activeTab].title}
-      </h3>
-      <p className="text-xl text-gray-300 mb-6">
-        {tabContent[activeTab].description}
-      </p>
-      
-      <ul className="space-y-4 mb-8">
-        {tabContent[activeTab].features.map((feature, index) => (
-          <motion.li 
-            key={index}
-            className="flex items-start space-x-3"
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: index * 0.1 }}
-          >
-            <CheckCircle className="w-6 h-6 text-green-500 mt-0.5 flex-shrink-0" />
-            <span>{feature}</span>
-          </motion.li>
-        ))}
-      </ul>
-      
-      <motion.button 
-        className="bg-indigo-600 hover:bg-indigo-500 px-6 py-3 rounded-lg font-medium flex items-center space-x-2"
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.98 }}
-      >
-        <span>{tabContent[activeTab].cta}</span>
-        <ChevronRight className="w-5 h-5" />
-      </motion.button>
-    </div>
-    
-    <div className="relative">
-      {/* Tab-specific image/animation */}
-      <motion.div
-        className="rounded-lg overflow-hidden border-2 border-indigo-500/30 shadow-2xl shadow-indigo-500/20"
-        initial={{ scale: 0.9 }}
-        animate={{ scale: 1 }}
-        transition={{ duration: 0.5 }}
-      >
-        <img 
-          src={tabContent[activeTab].image} 
-          alt={activeTab === 'behavioral' ? 'Behavioral Interview' : 'Technical Interview'} 
-          className="w-full h-auto rounded-lg"
-        />
-      </motion.div>
-      
-      {/* Floating decoration elements specific to each tab */}
-      {activeTab === 'behavioral' ? (
-        <>
-          <motion.div 
-            className="absolute -top-6 -right-6 bg-blue-900 rounded-lg p-3 shadow-lg"
-            animate={{ y: [0, -8, 0] }}
-            transition={{ repeat: Infinity, duration: 4 }}
-          >
-            <MessageSquare className="w-6 h-6 text-blue-300" />
-          </motion.div>
-        </>
-      ) : (
-        <>
-          <motion.div 
-            className="absolute -top-6 -right-6 bg-purple-900 rounded-lg p-3 shadow-lg"
-            animate={{ y: [0, -8, 0] }}
-            transition={{ repeat: Infinity, duration: 4 }}
-          >
-            <Code className="w-6 h-6 text-purple-300" />
-          </motion.div>
-        </>
-      )}
-    </div>
-  </motion.div>
-</AnimatePresence>
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.3 }}
+                className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center"
+              >
+                <div>
+                  <h3 className="text-2xl md:text-3xl font-bold mb-4">
+                    {tabContent[activeTab].title}
+                  </h3>
+                  <p className="text-xl text-gray-300 mb-6">
+                    {tabContent[activeTab].description}
+                  </p>
+                  
+                  <ul className="space-y-4 mb-8">
+                    {tabContent[activeTab].features.map((feature, index) => (
+                      <motion.li 
+                        key={index}
+                        className="flex items-start space-x-3"
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                      >
+                        <CheckCircle className="w-6 h-6 text-green-500 mt-0.5 flex-shrink-0" />
+                        <span>{feature}</span>
+                      </motion.li>
+                    ))}
+                  </ul>
+                  
+                  <motion.button 
+                    className="bg-indigo-600 hover:bg-indigo-500 px-6 py-3 rounded-lg font-medium flex items-center space-x-2"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => router.push(tabContent[activeTab].path)}
+                  >
+                    <span>{tabContent[activeTab].cta}</span>
+                    <ChevronRight className="w-5 h-5" />
+                  </motion.button>
+                </div>
+                
+                <div className="relative">
+                  {/* Tab-specific image/animation */}
+                  <motion.div
+                    className="rounded-lg overflow-hidden border-2 border-indigo-500/30 shadow-2xl shadow-indigo-500/20"
+                    initial={{ scale: 0.9 }}
+                    animate={{ scale: 1 }}
+                    transition={{ duration: 0.5 }}
+                  >
+                    <img 
+                      src={tabContent[activeTab].image} 
+                      alt={activeTab === 'behavioral' ? 'Behavioral Interview' : 'Technical Interview'} 
+                      className="w-full h-auto rounded-lg"
+                    />
+                  </motion.div>
+                  
+                  {/* Floating decoration elements specific to each tab */}
+                  {activeTab === 'behavioral' ? (
+                    <>
+                      <motion.div 
+                        className="absolute -top-6 -right-6 bg-blue-900 rounded-lg p-3 shadow-lg"
+                        animate={{ y: [0, -8, 0] }}
+                        transition={{ repeat: Infinity, duration: 4 }}
+                      >
+                        <MessageSquare className="w-6 h-6 text-blue-300" />
+                      </motion.div>
+                    </>
+                  ) : (
+                    <>
+                      <motion.div 
+                        className="absolute -top-6 -right-6 bg-purple-900 rounded-lg p-3 shadow-lg"
+                        animate={{ y: [0, -8, 0] }}
+                        transition={{ repeat: Infinity, duration: 4 }}
+                      >
+                        <Code className="w-6 h-6 text-purple-300" />
+                      </motion.div>
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            </AnimatePresence>
           </div>
         </section>
         
@@ -553,6 +570,7 @@ export default function MockInterviewPage() {
                 className="bg-white text-indigo-900 hover:bg-gray-100 px-8 py-4 rounded-lg font-bold text-lg shadow-lg relative z-10"
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.98 }}
+                onClick={() => router.push(tabContent[activeTab].path)}
               >
                 Start Your First Interview
               </motion.button>
@@ -578,8 +596,8 @@ export default function MockInterviewPage() {
             <div>
               <h5 className="font-semibold mb-4">Features</h5>
               <ul className="space-y-2 text-gray-400">
-                <li><Link href="#" className="hover:text-white transition">Behavioral Interviews</Link></li>
-                <li><Link href="#" className="hover:text-white transition">Technical Interviews</Link></li>
+                <li><Link href="/interviews/behavioral" className="hover:text-white transition">Behavioral Interviews</Link></li>
+                <li><Link href="/interviews/technical" className="hover:text-white transition">Technical Interviews</Link></li>
                 <li><Link href="#" className="hover:text-white transition">Progress Tracking</Link></li>
                 <li><Link href="#" className="hover:text-white transition">Feedback Analysis</Link></li>
               </ul>
@@ -606,7 +624,7 @@ export default function MockInterviewPage() {
             </div>
           </div>
           
-         <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center">
+          <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center">
             <p className="text-gray-500 mb-4 md:mb-0">&copy; 2025 Hire Flow. All rights reserved.</p>
             
             <div className="flex space-x-6">
