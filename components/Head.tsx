@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { SignedIn, SignedOut, UserButton } from '@clerk/nextjs';
 
 const Head = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
