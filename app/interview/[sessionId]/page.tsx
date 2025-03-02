@@ -1,49 +1,51 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { RefreshCw, MicIcon, MicOffIcon } from 'lucide-react';
 
-interface ExtendedSpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
+interface Message {
+  id: string;
+  content: string;
+  sender: 'user' | 'recruiter';
+  timestamp: Date;
 }
 
-interface Message {
-  role: 'user' | 'recruiter';
-  content: string;
-}
+const generateId = () => `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
 export default function RecruiterInterviewSpeechPage() {
+  const router = useRouter();
   const [conversation, setConversation] = useState<Message[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [isListening, setIsListening] = useState<boolean>(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const hasGreetedRef = useRef<boolean>(false);
 
-  // Setup SpeechRecognition on component mount
+  // Initialize SpeechRecognition on component mount
   useEffect(() => {
-    const SpeechRecognition =
-      window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       toast.error('Speech recognition is not supported in this browser.');
       return;
     }
     const recognition = new SpeechRecognition();
     recognition.lang = 'en-US';
-    recognition.interimResults = false;
+    recognition.interimResults = false; // Only final results
     recognition.maxAlternatives = 1;
 
-    recognition.onresult = async (event: ExtendedSpeechRecognitionEvent) => {
-      const transcript = event.results[0][0].transcript;
-      addMessage({ role: 'user', content: transcript });
+    recognition.onresult = async (event: SpeechRecognitionEvent) => {
+      const transcript = event.results[0][0].transcript.trim();
+      if (!transcript) return;
+      const userMsg = { id: generateId(), role: 'user', content: transcript, timestamp: new Date() };
+      addMessage(userMsg);
       await sendMessage(transcript);
     };
 
     recognition.onerror = (event) => {
-      console.error('Speech recognition error', event);
+      console.error('Speech recognition error:', event);
       toast.error('Speech recognition error. Please try again.');
       setIsListening(false);
     };
@@ -54,63 +56,67 @@ export default function RecruiterInterviewSpeechPage() {
 
     recognitionRef.current = recognition;
 
-    // Greet only once when the component mounts
+    // Greet the candidate only once on mount
     if (!hasGreetedRef.current) {
       greetUser();
       hasGreetedRef.current = true;
     }
   }, []);
 
-  // Append a message to conversation
-  const addMessage = (message: Message) => {
-    setConversation(prev => [...prev, message]);
-  };
+  // Helper: Append a message to conversation
+  const addMessage = useCallback((msg: Message) => {
+    setConversation((prev) => [...prev, msg]);
+  }, []);
 
-  // Recruiter greeting
-  const greetUser = () => {
-    const greeting =
-      "Hello, I'm your recruiter. Welcome to your interview. Please tell me a bit about yourself.";
-    addMessage({ role: 'recruiter', content: greeting });
+  // Greet the candidate
+  const greetUser = useCallback(() => {
+    const greeting = "Hello, I'm your recruiter. Welcome to your interview. Please tell me a bit about yourself.";
+    addMessage({ id: generateId(), role: 'recruiter', content: greeting, timestamp: new Date() });
     speakText(greeting);
-  };
+  }, [addMessage]);
 
-  // Send transcript to API and handle recruiter reply
-  const sendMessage = async (message: string) => {
+  // Send user's message to API and process recruiter response
+  const sendMessage = useCallback(async (userMessage: string) => {
     setLoading(true);
     try {
-      const response = await fetch('/api/behavioral-interview/', {
+      // Remove any trailing slash from endpoint if needed
+      const endpoint = '/api/behavioral-interview';
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message: userMessage }),
       });
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response from API:', response.status, errorText);
         throw new Error('Failed to fetch recruiter response');
       }
       const data = await response.json();
-      const recruiterResponse = data.response || "I'm sorry, could you please repeat that?";
-      addMessage({ role: 'recruiter', content: recruiterResponse });
-      speakText(recruiterResponse);
+      const recruiterReply = data.response || "I'm sorry, could you please repeat that?";
+      addMessage({ id: generateId(), role: 'recruiter', content: recruiterReply, timestamp: new Date() });
+      speakText(recruiterReply);
     } catch (error: any) {
-      console.error(error);
+      console.error('Error in sendMessage:', error);
       toast.error(error.message || 'Something went wrong');
       // Restart listening on error
       startListening();
     } finally {
       setLoading(false);
     }
-  };
+  }, [addMessage]);
 
-  // Speak text via the SpeechSynthesis API and restart listening after speech
+  // Speak text using SpeechSynthesis API and restart listening afterward
   const speakText = (text: string) => {
     if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-US';
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.volume = 1;
       utterance.onend = () => {
-        if (!loading) {
-          setTimeout(() => {
-            startListening();
-          }, 500);
-        }
+        setTimeout(() => {
+          if (!loading) startListening();
+        }, 500);
       };
       window.speechSynthesis.speak(utterance);
     } else {
@@ -126,6 +132,16 @@ export default function RecruiterInterviewSpeechPage() {
     }
   };
 
+  // Toggle listening manually
+  const toggleListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    } else {
+      startListening();
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 p-4 flex items-center justify-center">
       <Card className="w-full max-w-3xl shadow-lg rounded-xl border-none">
@@ -133,9 +149,6 @@ export default function RecruiterInterviewSpeechPage() {
           <CardTitle className="text-2xl font-bold">
             Recruiter Interview (Speech-to-Speech)
           </CardTitle>
-          <p className="text-indigo-100 mt-2">
-            Engage in a natural conversation with our virtual recruiter.
-          </p>
         </CardHeader>
         <CardContent className="p-6">
           {/* Conversation log */}
@@ -143,11 +156,7 @@ export default function RecruiterInterviewSpeechPage() {
             {conversation.map((msg, index) => (
               <div
                 key={index}
-                className={`p-3 rounded-md max-w-[80%] ${
-                  msg.role === 'user'
-                    ? 'bg-blue-100 text-blue-900 self-end ml-auto'
-                    : 'bg-gray-100 text-gray-900 self-start mr-auto'
-                }`}
+                className={`p-3 rounded-md max-w-[80%] ${msg.role === 'user' ? 'bg-blue-100 text-blue-900 self-end ml-auto' : 'bg-gray-100 text-gray-900 self-start mr-auto'}`}
               >
                 <p className="whitespace-pre-wrap">
                   <strong>{msg.role === 'user' ? 'You' : 'Recruiter'}: </strong>
@@ -156,12 +165,12 @@ export default function RecruiterInterviewSpeechPage() {
               </div>
             ))}
           </div>
-          {/* Button to manually start speech recognition */}
+          {/* Button to manually trigger speech recognition */}
           <div className="flex justify-center">
             <Button
               type="button"
-              onClick={startListening}
-              disabled={loading || isListening}
+              onClick={toggleListening}
+              disabled={loading}
               className="flex items-center gap-2"
             >
               {loading ? (
@@ -171,8 +180,8 @@ export default function RecruiterInterviewSpeechPage() {
                 </>
               ) : (
                 <>
-                  {isListening ? 'Listening...' : 'Start Speaking'}
-                  <MicIcon className="h-4 w-4" />
+                  {isListening ? 'Stop Listening' : 'Start Speaking'}
+                  {isListening ? <MicOffIcon className="h-4 w-4" /> : <MicIcon className="h-4 w-4" />}
                 </>
               )}
             </Button>

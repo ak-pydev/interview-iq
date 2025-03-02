@@ -1,6 +1,6 @@
 // @/lib/interview-utils.ts
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '@/lib/db'; // Assuming you have a database connection setup
+import { db } from './db'; // Fixed import path based on your import map
 
 // Types for interview platform
 export interface InterviewSession {
@@ -18,6 +18,7 @@ export interface InterviewSession {
   participants?: InterviewParticipant[];
   createdAt: string;
   updatedAt: string;
+  messages?: InterviewMessage[]; // Optional messages property
 }
 
 export interface InterviewParticipant {
@@ -379,9 +380,9 @@ export async function processBehavioralInterview({
   tone: string,
   timeLimit: number
 }): Promise<{ response: string }> {
-  // This function is kept for backwards compatibility
+  // This function is kept for backwards compatibility.
   // In the human-to-human interview platform, this would simply pass through
-  // the latest message from the interviewer
+  // the latest message from the interviewer.
   
   if (conversation && conversation.length > 0) {
     const lastMessage = conversation[conversation.length - 1];

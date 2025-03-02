@@ -5,15 +5,14 @@ import {
   saveInterviewMessage,
   getInterviewSession,
   endInterviewSession,
-  getParticipantDetails
+  getParticipantDetails,
+  processBehavioralInterview
 } from '@/lib/interview-utils';
 
 export async function POST(request: Request) {
   try {
     // Parse the request payload
     const requestBody = await request.json();
-    
-    // Determine the action type
     const { action, sessionId, userId, message, role } = requestBody;
     
     if (!action) {
@@ -28,7 +27,6 @@ export async function POST(request: Request) {
       case 'create_session': {
         // Create a new interview session
         const { title, description, duration, interviewType, participantRoles } = requestBody;
-        
         if (!title || !interviewType || !participantRoles) {
           return NextResponse.json(
             { error: "Missing required fields for session creation" },
@@ -40,9 +38,9 @@ export async function POST(request: Request) {
           title,
           description: description || '',
           createdBy: userId,
-          duration: duration || 30, // Default 30 minutes
-          interviewType, // e.g., 'technical', 'behavioral', 'general'
-          participantRoles, // e.g., ['interviewer', 'candidate']
+          duration: duration || 30,
+          interviewType,
+          participantRoles,
           scheduledTime: requestBody.scheduledTime || new Date().toISOString(),
           status: 'scheduled'
         });
@@ -78,19 +76,18 @@ export async function POST(request: Request) {
           );
         }
         
-        // Get session details to return to the client
         const sessionDetails = await getInterviewSession(sessionId);
         
         return NextResponse.json({
           success: true,
           session: sessionDetails,
-          role: role,
+          role,
           participantId: joinResult.participantId
         });
       }
       
       case 'send_message': {
-        // Send a message in an interview session
+        // Save the user's message and generate a recruiter reply
         if (!sessionId || !userId || !message) {
           return NextResponse.json(
             { error: "Missing required fields: sessionId, userId, or message" },
@@ -98,7 +95,7 @@ export async function POST(request: Request) {
           );
         }
         
-        // Get participant details to verify they're in the session
+        // Verify the user is a participant in the session
         const participant = await getParticipantDetails(sessionId, userId);
         if (!participant) {
           return NextResponse.json(
@@ -107,27 +104,49 @@ export async function POST(request: Request) {
           );
         }
         
-        // Save the message
+        // Save the user's message
         const savedMessage = await saveInterviewMessage({
           sessionId,
           senderId: userId,
           senderRole: participant.role,
           content: message,
-          type: requestBody.messageType || 'text', // 'text', 'question', 'answer', 'feedback'
+          type: requestBody.messageType || 'text',
           timestamp: new Date().toISOString(),
           attachments: requestBody.attachments || [],
           metadata: requestBody.metadata || {}
         });
         
+        // Retrieve the conversation history (latest messages)
+        const sessionData = await getInterviewSession(sessionId);
+        const conversationHistory = sessionData?.messages || [];
+        
+        // Process conversation history to generate a recruiter reply
+        const aiResult = await processBehavioralInterview({
+          conversation: conversationHistory,
+          interviewContext: {}, // You can pass additional context if needed
+          tone: 'friendly',
+          timeLimit: 60
+        });
+        
+        // Save the recruiter's reply as a system message
+        const recruiterMessage = await saveInterviewMessage({
+          sessionId,
+          senderId: 'system',
+          senderRole: 'system',
+          content: aiResult.response,
+          type: 'text',
+          timestamp: new Date().toISOString()
+        });
+        
         return NextResponse.json({
           success: true,
           messageId: savedMessage.id,
-          timestamp: savedMessage.timestamp
+          recruiterResponse: aiResult.response,
+          recruiterMessageId: recruiterMessage.id
         });
       }
       
       case 'end_session': {
-        // End an interview session
         if (!sessionId || !userId) {
           return NextResponse.json(
             { error: "Missing required fields: sessionId or userId" },
@@ -135,7 +154,7 @@ export async function POST(request: Request) {
           );
         }
         
-        // Verify the user has permission to end the session
+        // Verify that only interviewers can end the session
         const participant = await getParticipantDetails(sessionId, userId);
         if (!participant || participant.role !== 'interviewer') {
           return NextResponse.json(
@@ -159,7 +178,6 @@ export async function POST(request: Request) {
       }
       
       case 'get_session': {
-        // Get details about an interview session
         if (!sessionId) {
           return NextResponse.json(
             { error: "Missing required field: sessionId" },
@@ -187,10 +205,8 @@ export async function POST(request: Request) {
           { status: 400 }
         );
     }
-    
   } catch (error: any) {
     console.error('Error in interview platform API:', error);
-    
     return NextResponse.json(
       { error: error.message || 'Failed to process interview request' },
       { status: 500 }

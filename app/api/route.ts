@@ -1,4 +1,3 @@
-// File: /api/route.ts
 import { NextResponse } from 'next/server';
 import { processBehavioralInterview } from './behavioral-interview/route';
 import { processGemini } from './gemini/route';
@@ -11,9 +10,16 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     console.log("Received API request:", JSON.stringify(body).substring(0, 200) + "...");
-    const action = body.action;
-    let result;
+    
+    const { action } = body;
+    if (!action) {
+      return NextResponse.json(
+        { error: "Missing required field: action" },
+        { status: 400 }
+      );
+    }
 
+    let result;
     switch (action) {
       case 'saveMessage':
         console.log("Dispatching save message request");

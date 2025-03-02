@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -23,7 +23,7 @@ export default function RecruiterInterviewSpeechPage() {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const hasGreetedRef = useRef<boolean>(false);
 
-  // Setup SpeechRecognition on component mount
+  // Initialize SpeechRecognition
   useEffect(() => {
     const SpeechRecognition =
       window.SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -43,7 +43,7 @@ export default function RecruiterInterviewSpeechPage() {
     };
 
     recognition.onerror = (event) => {
-      console.error('Speech recognition error', event);
+      console.error('Speech recognition error:', event);
       toast.error('Speech recognition error. Please try again.');
       setIsListening(false);
     };
@@ -54,34 +54,34 @@ export default function RecruiterInterviewSpeechPage() {
 
     recognitionRef.current = recognition;
 
-    // Greet only once when the component mounts
+    // Greet the candidate once on mount
     if (!hasGreetedRef.current) {
       greetUser();
       hasGreetedRef.current = true;
     }
   }, []);
 
-  // Append a message to conversation
+  // Append a message to the conversation log
   const addMessage = (message: Message) => {
-    setConversation(prev => [...prev, message]);
+    setConversation((prev) => [...prev, message]);
   };
 
-  // Recruiter greeting
-  const greetUser = () => {
+  // Initial greeting from the recruiter
+  const greetUser = useCallback(() => {
     const greeting =
       "Hello, I'm your recruiter. Welcome to your interview. Please tell me a bit about yourself.";
     addMessage({ role: 'recruiter', content: greeting });
     speakText(greeting);
-  };
+  }, []);
 
-  // Send transcript to API and handle recruiter reply
-  const sendMessage = async (message: string) => {
+  // Send user's message to the behavioral-interview API and handle recruiter reply
+  const sendMessage = useCallback(async (userMessage: string) => {
     setLoading(true);
     try {
       const response = await fetch('/api/behavioral-interview/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message: userMessage }),
       });
       if (!response.ok) {
         throw new Error('Failed to fetch recruiter response');
@@ -91,21 +91,22 @@ export default function RecruiterInterviewSpeechPage() {
       addMessage({ role: 'recruiter', content: recruiterResponse });
       speakText(recruiterResponse);
     } catch (error: any) {
-      console.error(error);
+      console.error('Error in sendMessage:', error);
       toast.error(error.message || 'Something went wrong');
       // Restart listening on error
       startListening();
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  // Speak text via the SpeechSynthesis API and restart listening after speech
+  // Speak text using SpeechSynthesis API and restart listening after speaking ends
   const speakText = (text: string) => {
     if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-US';
       utterance.onend = () => {
+        // Restart listening after speaking if not loading
         if (!loading) {
           setTimeout(() => {
             startListening();
@@ -118,7 +119,7 @@ export default function RecruiterInterviewSpeechPage() {
     }
   };
 
-  // Start listening if not already listening
+  // Start listening if not already
   const startListening = () => {
     if (recognitionRef.current && !isListening) {
       setIsListening(true);
@@ -133,12 +134,9 @@ export default function RecruiterInterviewSpeechPage() {
           <CardTitle className="text-2xl font-bold">
             Recruiter Interview (Speech-to-Speech)
           </CardTitle>
-          <p className="text-indigo-100 mt-2">
-            Engage in a natural conversation with our virtual recruiter.
-          </p>
         </CardHeader>
         <CardContent className="p-6">
-          {/* Conversation log */}
+          {/* Conversation Log */}
           <div className="space-y-4 max-h-96 overflow-y-auto mb-6">
             {conversation.map((msg, index) => (
               <div
@@ -172,7 +170,7 @@ export default function RecruiterInterviewSpeechPage() {
               ) : (
                 <>
                   {isListening ? 'Listening...' : 'Start Speaking'}
-                  <MicIcon className="h-4 w-4" />
+                  {isListening ? <MicOffIcon className="h-4 w-4" /> : <MicIcon className="h-4 w-4" />}
                 </>
               )}
             </Button>
