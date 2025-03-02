@@ -1,7 +1,18 @@
-import { SignIn, SignedOut } from '@clerk/nextjs';
+import { SignIn, SignedOut, useUser } from '@clerk/nextjs';
 import Head from 'next/head';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function SignInPage() {
+  const router = useRouter();
+  const { isSignedIn } = useUser();
+
+  useEffect(() => {
+    if (isSignedIn) {
+      router.push('/');
+    }
+  }, [isSignedIn, router]);
+
   return (
     <>
       <Head>
@@ -9,8 +20,6 @@ export default function SignInPage() {
         <meta name="description" content="Sign in to access your career portal" />
       </Head>
       <div className="min-h-screen flex flex-col">
-        {/* Header with logo and user button */}
-
         {/* Main content with side-by-side layout */}
         <div className="flex-grow flex items-center justify-center">
           <div className="flex max-w-4xl w-full overflow-hidden shadow-2xl rounded-lg">
