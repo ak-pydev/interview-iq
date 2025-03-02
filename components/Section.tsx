@@ -1,25 +1,53 @@
-"use client";
+'use client';
+
 import React, { useState, useRef, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useUser } from "@clerk/nextjs"; // <-- Clerk import
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { WarpBackground } from "@/components/ui/warp-background";
+import {
+  Upload,
+  FileText,
+  Briefcase,
+  HelpCircle,
+  X,
+  LightbulbIcon,
+  PlusCircle,
+  Edit,
+  ArrowRight,
+  Clock,
+  CheckCircle,
+  Sparkles,
+  AlertCircle,
+  History,
+  ExternalLink
+} from "lucide-react";
 
-// Uncomment the next two lines if you have access to ScrollSmoother
+// If you're using ScrollSmoother (premium GSAP plugin), uncomment and register it:
 // import { ScrollSmoother } from "gsap/ScrollSmoother";
 // gsap.registerPlugin(ScrollTrigger, ScrollSmoother);
-
 
 gsap.registerPlugin(ScrollTrigger);
 
 const Section = () => {
+  const router = useRouter();
+
+  // Using Clerk's useUser hook instead of next-auth
+  const { isLoaded, isSignedIn } = useUser();
+
   const [activeTab, setActiveTab] = useState("students");
+  const [activeView, setActiveView] = useState("setup");
+
+  // Refs for smooth scrolling and hero animations
   const smoothWrapperRef = useRef<HTMLDivElement>(null);
   const smoothContentRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // If premium ScrollSmoother is used, we can create a smoother instance like this:
+    // If premium ScrollSmoother is used, initialize it here:
     // if (smoothWrapperRef.current && smoothContentRef.current && ScrollSmoother) {
     //   ScrollSmoother.create({
     //     wrapper: smoothWrapperRef.current,
@@ -28,7 +56,7 @@ const Section = () => {
     //     effects: true,
     //   });
     // }
-    // GSAP animation for hero section
+    // Simple GSAP animation for hero section:
     if (heroRef.current) {
       gsap.fromTo(
         heroRef.current,
@@ -38,12 +66,126 @@ const Section = () => {
     }
   }, []);
 
+   const features = [
+    {
+      title: "AI Resume Feedback",
+      description: "Get personalized feedback on your resume with AI-powered analysis.",
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="40"
+          height="40"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+          <polyline points="10 9 9 9 8 9" />
+        </svg>
+      ),
+    },
+    {
+      title: "Skill Gap Analysis",
+      description: "Identify the skills you need to develop for your dream role.",
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="40"
+          height="40"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="m7 10 5 5 5-5" />
+          <path d="M12 15V3" />
+          <path d="M20 21H4" />
+        </svg>
+      ),
+    },
+    {
+      title: "AI Mock Interviews",
+      description: "Practice interviews with AI and get detailed performance feedback.",
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="40"
+          height="40"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      ),
+    },
+    {
+      title: "Job Market Insights",
+      description: "Get real-time insights on job market trends and opportunities.",
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="40"
+          height="40"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="14" />
+          <path d="M2 20h20" />
+        </svg>
+      ),
+    },
+  ];
+
+
   const cardVariants = {
     hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.6 } },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.6 },
+    },
+  };
+
+  // Ensure the user is signed in before starting the career journey.
+  // If not signed in, redirect them to /sign-in
+  const handleStartCareerJourney = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    // Check if Clerk's user state is loaded first (avoid undefined)
+    if (!isLoaded) {
+      console.log("Clerk user data not yet loaded.");
+      return;
+    }
+
+    if (isSignedIn) {
+      router.push("/get-started");
+    } else {
+      router.push("/sign-in");
+    }
   };
 
   return (
+    
     <div id="smooth-wrapper" ref={smoothWrapperRef}>
       <div id="smooth-content" ref={smoothContentRef}>
         <motion.main
@@ -72,6 +214,7 @@ const Section = () => {
                 <div className="flex flex-col sm:flex-row justify-center gap-4">
                   <a
                     href="/get-started"
+                    onClick={handleStartCareerJourney}
                     className="px-8 py-4 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition duration-300 shadow-lg hover:shadow-xl"
                   >
                     Start Your Career Journey
@@ -88,73 +231,70 @@ const Section = () => {
 
             {/* Product Demo */}
             <WarpBackground>
-            <motion.div
-              className="relative max-w-4xl mx-auto"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5, duration: 1 }}
-            >
-              <div className="w-full h-96 bg-gray-800 rounded-xl shadow-2xl overflow-hidden">
-                <div className="w-full h-6 bg-gray-700 flex items-center px-4">
-                  <div className="flex space-x-2">
-                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                  </div>
-                </div>
-                <div className="p-4 h-full bg-gradient-to-br from-indigo-900 to-purple-900 text-white flex flex-col items-center justify-center">
-                  <p className="text-lg mb-4">AI Mock Interview in Progress</p>
-                  <div className="flex items-center mb-6">
-                    <div className="w-16 h-16 bg-indigo-600 rounded-full flex items-center justify-center mr-6">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="32"
-                        height="32"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <circle cx="12" cy="8" r="5" />
-                        <path d="M20 21a8 8 0 0 0-16 0" />
-                      </svg>
-                    </div>
-                    <div className="flex-1 p-4 bg-indigo-800 rounded-lg">
-                      <p>
-                        Tell me about a time you solved a difficult problem at work.
-                      </p>
+              <motion.div
+                className="relative max-w-4xl mx-auto"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5, duration: 1 }}
+              >
+                <div className="w-full h-96 bg-gray-800 rounded-xl shadow-2xl overflow-hidden">
+                  <div className="w-full h-6 bg-gray-700 flex items-center px-4">
+                    <div className="flex space-x-2">
+                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                      <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
                     </div>
                   </div>
-                  <div className="w-full max-w-md p-3 bg-indigo-700 rounded-lg">
-                    <p className="text-sm mb-2">Real-time Analysis:</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="p-2 bg-indigo-800 rounded">
-                        <p className="text-xs font-medium">Confidence</p>
-                        <div className="w-full bg-gray-700 rounded-full h-2.5 mt-1">
-                          <div
-                            className="bg-green-500 h-2.5 rounded-full"
-                            style={{ width: "85%" }}
-                          ></div>
-                        </div>
+                  <div className="p-4 h-full bg-gradient-to-br from-indigo-900 to-purple-900 text-white flex flex-col items-center justify-center">
+                    <p className="text-lg mb-4">AI Mock Interview in Progress</p>
+                    <div className="flex items-center mb-6">
+                      <div className="w-16 h-16 bg-indigo-600 rounded-full flex items-center justify-center mr-6">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="32"
+                          height="32"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <circle cx="12" cy="8" r="5" />
+                          <path d="M20 21a8 8 0 0 0-16 0" />
+                        </svg>
                       </div>
-                      <div className="p-2 bg-indigo-800 rounded">
-                        <p className="text-xs font-medium">Structure</p>
-                        <div className="w-full bg-gray-700 rounded-full h-2.5 mt-1">
-                          <div
-                            className="bg-yellow-500 h-2.5 rounded-full"
-                            style={{ width: "65%" }}
-                          ></div>
-                        </div>
+                      <div className="flex-1 p-4 bg-indigo-800 rounded-lg">
+                        <p>Tell me about a time you solved a difficult problem at work.</p>
                       </div>
                     </div>
+                    <div className="w-full max-w-md p-3 bg-indigo-700 rounded-lg">
+                      <p className="text-sm mb-2">Real-time Analysis:</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="p-2 bg-indigo-800 rounded">
+                          <p className="text-xs font-medium">Confidence</p>
+                          <div className="w-full bg-gray-700 rounded-full h-2.5 mt-1">
+                            <div
+                              className="bg-green-500 h-2.5 rounded-full"
+                              style={{ width: "85%" }}
+                            ></div>
+                          </div>
+                        </div>
+                        <div className="p-2 bg-indigo-800 rounded">
+                          <p className="text-xs font-medium">Structure</p>
+                          <div className="w-full bg-gray-700 rounded-full h-2.5 mt-1">
+                            <div
+                              className="bg-yellow-500 h-2.5 rounded-full"
+                              style={{ width: "65%" }}
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </motion.div>
+              </motion.div>
             </WarpBackground>
-           
           </motion.section>
 
           {/* Features Section */}
@@ -175,126 +315,39 @@ const Section = () => {
                   transition={{ duration: 1 }}
                   className="text-xl text-gray-600 max-w-3xl mx-auto"
                 >
-                  Our platform uses cutting-edge AI to help you navigate your
-                  career journey from start to finish.
+                  Our platform uses cutting-edge AI to help you navigate your career journey from start to finish.
                 </motion.p>
               </div>
 
               {/* Bento Grid Layout */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-                {[
-                  {
-                    title: "AI Resume Feedback",
-                    description:
-                      "Get personalized feedback on your resume with AI-powered analysis.",
-                    icon: (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="40"
-                        height="40"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                        <polyline points="14 2 14 8 20 8" />
-                        <line x1="16" y1="13" x2="8" y2="13" />
-                        <line x1="16" y1="17" x2="8" y2="17" />
-                        <polyline points="10 9 9 9 8 9" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    title: "Skill Gap Analysis",
-                    description:
-                      "Identify the skills you need to develop for your dream role.",
-                    icon: (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="40"
-                        height="40"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="m7 10 5 5 5-5" />
-                        <path d="M12 15V3" />
-                        <path d="M20 21H4" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    title: "AI Mock Interviews",
-                    description:
-                      "Practice interviews with AI and get detailed performance feedback.",
-                    icon: (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="40"
-                        height="40"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                        <circle cx="9" cy="7" r="4" />
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    title: "Job Market Insights",
-                    description:
-                      "Get real-time insights on job market trends and opportunities.",
-                    icon: (
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="40"
-                        height="40"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <line x1="18" y1="20" x2="18" y2="10" />
-                        <line x1="12" y1="20" x2="12" y2="4" />
-                        <line x1="6" y1="20" x2="6" y2="14" />
-                        <path d="M2 20h20" />
-                      </svg>
-                    ),
-                  },
-                ].map((feature, index) => (
-                  <motion.div
-                    key={index}
-                    variants={cardVariants}
-                    initial="hidden"
-                    animate="visible"
-                    className="bg-indigo-50 p-6 rounded-xl shadow-md hover:shadow-lg transition duration-300"
-                  >
-                    <div className="text-indigo-600 mb-4">
-                      {feature.icon}
-                    </div>
-                    <h3 className="text-xl font-bold text-indigo-900 mb-2">
-                      {feature.title}
-                    </h3>
-                    <p className="text-gray-600">{feature.description}</p>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-          </section>
+             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          {features.map((feature, index) => (
+            <motion.div
+              key={index}
+              variants={cardVariants}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true }} // animate on scroll once
+              className="group relative overflow-hidden rounded-xl border border-gray-200 
+                         bg-indigo-50 p-6 shadow-md transition duration-300 hover:shadow-xl"
+            >
+              <div className="text-indigo-600 mb-4">{feature.icon}</div>
+              <h3 className="text-xl font-bold text-indigo-900 mb-2">
+                {feature.title}
+              </h3>
+              <p className="text-gray-600">{feature.description}</p>
+
+              {/* Optional “hover card” effect */}
+              <div
+                className="absolute inset-0 z-10 pointer-events-none 
+                           bg-gradient-to-b from-transparent to-indigo-900/5 
+                           opacity-0 transition duration-300 group-hover:opacity-100"
+              />
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </section>
 
           {/* Who Benefits Section */}
           <section className="px-4 py-16 bg-indigo-50">
@@ -304,8 +357,7 @@ const Section = () => {
                   Who Benefits?
                 </h2>
                 <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                  Our platform is designed for everyone at different career
-                  stages.
+                  Our platform is designed for everyone at different career stages.
                 </p>
               </div>
 
@@ -344,6 +396,7 @@ const Section = () => {
                 </div>
 
                 <div className="p-6">
+                  {/* Students Tab */}
                   {activeTab === "students" && (
                     <div className="flex flex-col md:flex-row items-center">
                       <div className="md:w-1/2 mb-6 md:mb-0 md:pr-6">
@@ -417,6 +470,7 @@ const Section = () => {
                           </li>
                         </ul>
                       </div>
+
                       <div className="md:w-1/2 bg-indigo-100 rounded-xl p-6">
                         <div className="bg-white rounded-lg p-4 shadow-md">
                           <div className="flex items-center mb-4">
@@ -443,7 +497,7 @@ const Section = () => {
                             </div>
                           </div>
                           <p className="text-gray-600 mb-3">
-                            Here&apos;s my feedback on your resume:
+                            Here's my feedback on your resume:
                           </p>
                           <div className="bg-indigo-50 p-3 rounded-lg text-sm">
                             <p className="mb-2">
@@ -451,7 +505,7 @@ const Section = () => {
                               work. Try using action verbs and quantifiable achievements.
                             </p>
                             <p className="font-medium text-indigo-700">
-                              I&apos;ve suggested edits that could increase your interview
+                              I've suggested edits that could increase your interview
                               chances by 40%.
                             </p>
                           </div>
@@ -460,6 +514,7 @@ const Section = () => {
                     </div>
                   )}
 
+                  {/* Job Seekers Tab */}
                   {activeTab === "job-seekers" && (
                     <div className="flex flex-col md:flex-row items-center">
                       <div className="md:w-1/2 mb-6 md:mb-0 md:pr-6">
@@ -467,8 +522,7 @@ const Section = () => {
                           For Job Seekers
                         </h3>
                         <p className="text-gray-600 mb-4">
-                          Finding the right job can be stressful. Our AI mentor helps
-                          you:
+                          Finding the right job can be stressful. Our AI mentor helps you:
                         </p>
                         <ul className="space-y-2">
                           <li className="flex items-center">
@@ -538,9 +592,7 @@ const Section = () => {
                               </svg>
                             </div>
                             <div>
-                              <p className="font-medium text-indigo-900">
-                                Mock Interview Analysis
-                              </p>
+                              <p className="font-medium text-indigo-900">Mock Interview Analysis</p>
                               <p className="text-sm text-gray-500">Today, 4:15 PM</p>
                             </div>
                           </div>
@@ -549,16 +601,12 @@ const Section = () => {
                           </p>
                           <div className="bg-indigo-50 p-3 rounded-lg text-sm">
                             <div className="mb-2">
-                              <span className="font-medium">
-                                Technical Knowledge:{" "}
-                              </span>
+                              <span className="font-medium">Technical Knowledge: </span>
                               <span className="text-green-600">Strong</span>
                             </div>
                             <div className="mb-2">
                               <span className="font-medium">Communication: </span>
-                              <span className="text-yellow-600">
-                                Needs improvement
-                              </span>
+                              <span className="text-yellow-600">Needs improvement</span>
                             </div>
                             <p className="font-medium text-indigo-700 mt-2">
                               Try using more concrete examples in your STAR responses.
@@ -569,12 +617,11 @@ const Section = () => {
                     </div>
                   )}
 
+                  {/* Professionals Tab */}
                   {activeTab === "professionals" && (
                     <div className="flex flex-col md:flex-row items-center">
                       <div className="md:w-1/2 mb-6 md:mb-0 md:pr-6">
-                        <h3 className="text-2xl font-bold text-indigo-900 mb-4">
-                          For Professionals
-                        </h3>
+                        <h3 className="text-2xl font-bold text-indigo-900 mb-4">For Professionals</h3>
                         <p className="text-gray-600 mb-4">
                           Looking to advance your career? Our AI mentor helps you:
                         </p>
@@ -660,9 +707,7 @@ const Section = () => {
                               </svg>
                             </div>
                             <div>
-                              <p className="font-medium text-indigo-900">
-                                Leadership Evaluation
-                              </p>
+                              <p className="font-medium text-indigo-900">Leadership Evaluation</p>
                               <p className="text-sm text-gray-500">Today, 5:30 PM</p>
                             </div>
                           </div>
@@ -671,9 +716,7 @@ const Section = () => {
                           </p>
                           <div className="bg-indigo-50 p-3 rounded-lg text-sm">
                             <div className="mb-2">
-                              <span className="font-medium">
-                                Team Collaboration:{" "}
-                              </span>
+                              <span className="font-medium">Team Collaboration: </span>
                               <span className="text-green-600">Excellent</span>
                             </div>
                             <div className="mb-2">

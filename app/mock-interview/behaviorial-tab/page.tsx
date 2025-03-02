@@ -88,10 +88,20 @@ export default function BehavioralInterviewTab() {
     }
   ];
 
-  // Handle file change
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, setFile: React.Dispatch<React.SetStateAction<File | null>>) => {
+  // Handle file change (only PDF and DOCX allowed)
+  const handleFileChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+    setFile: React.Dispatch<React.SetStateAction<File | null>>
+  ) => {
     if (event.target.files && event.target.files[0]) {
-      setFile(event.target.files[0]);
+      const file = event.target.files[0];
+      // Allow only PDF or DOCX files
+      if (file.type === 'application/pdf' || file.name.endsWith('.docx')) {
+        setFile(file);
+      } else {
+        alert('Only PDF and DOCX files are allowed.');
+        setFile(null);
+      }
     }
   };
 
@@ -123,28 +133,10 @@ export default function BehavioralInterviewTab() {
     setErrorMessage('');
   };
 
-  // Extract text from resume file
-  const extractTextFromFile = async (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          if (event.target?.result) {
-            resolve(event.target.result.toString());
-          } else {
-            resolve('');
-          }
-        } catch (error) {
-          console.error('Error extracting text from file:', error);
-          resolve('');
-        }
-      };
-      reader.onerror = () => {
-        console.error('Error reading file');
-        resolve('');
-      };
-      reader.readAsText(file);
-    });
+  // For PDF and DOCX, we won't attempt text extraction.
+  // Instead, we'll simply use the file name.
+  const processResumeFile = async (file: File): Promise<string> => {
+    return `Resume file: ${file.name}`;
   };
 
   // Start Interview: validate fields, process resume, and store setup data
@@ -164,13 +156,8 @@ export default function BehavioralInterviewTab() {
       if (resumeFile) {
         console.log("Processing resume file:", resumeFile.name);
         resumeContentType = resumeFile.type;
-        if (resumeFile.type === 'text/plain' || resumeFile.name.endsWith('.txt')) {
-          resumeText = await extractTextFromFile(resumeFile);
-          console.log("Successfully extracted text from file");
-        } else {
-          resumeText = `Resume file: ${resumeFile.name}`;
-          console.log("Using filename only for non-text file");
-        }
+        // Only process PDF and DOCX by using the filename
+        resumeText = await processResumeFile(resumeFile);
         if (resumeText.length > 5000) {
           resumeText = resumeText.substring(0, 5000) + "...";
         }
@@ -208,7 +195,7 @@ export default function BehavioralInterviewTab() {
       }
       
       console.log('Navigating to interview page...');
-      router.push('/behavioral-tab/start_int');
+      router.push('/mock-interview/behaviorial-tab/start_int');
     } catch (error: any) {
       console.error('Error during interview setup:', error);
       setErrorMessage('There was an error starting your interview. Please try again.');
@@ -389,19 +376,19 @@ export default function BehavioralInterviewTab() {
                           <div className="flex flex-col items-center space-y-3">
                             <Upload className="w-10 h-10 text-indigo-500" />
                             <span className="text-indigo-300">Upload your resume</span>
-                            <span className="text-xs text-indigo-400">Text (.txt) files work best</span>
+                            <span className="text-xs text-indigo-400">PDF (.pdf) or DOCX (.docx) only</span>
                           </div>
                         )}
                         <input 
                           type="file" 
                           ref={resumeInputRef}
                           onChange={(e) => handleFileChange(e, setResumeFile)} 
-                          accept=".txt,.csv,.doc,.docx"
+                          accept=".pdf,.docx"
                           className="hidden" 
                         />
                       </div>
                       <p className="mt-2 text-xs text-indigo-300">
-                        Plain text format recommended for best results
+                        Only PDF and DOCX files are accepted.
                       </p>
                     </div>
                     <div>

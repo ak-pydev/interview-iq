@@ -1,64 +1,50 @@
-// app/api/process-resume/route.ts
-
 import { NextResponse } from 'next/server';
-import Papa from 'papaparse';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+if (!process.env.GEMINI_API_KEY) {
+  throw new Error("GEMINI_API_KEY is not defined");
+}
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const model = genAI.getGenerativeModel({ model: 'gemini-2.0-pro-exp-02-05' });
 
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get('resume');
-    
+
     if (!file || !(file instanceof File)) {
       return NextResponse.json(
         { error: 'No file provided or invalid file' },
         { status: 400 }
       );
     }
-    
-    let extractedText = '';
-    
-    // For now, just handle text-based files
-    try {
-      // Read file as text
-      extractedText = await file.text();
-      
-      // If it's a CSV file, use PapaParse to make it more readable
-      if (file.name.endsWith('.csv') || file.type === 'text/csv') {
-        const result = Papa.parse(extractedText);
-        if (result.data && Array.isArray(result.data)) {
-          // Convert CSV data to readable text
-          extractedText = result.data
-            .map(row => Array.isArray(row) ? row.join(', ') : String(row))
-            .join('\n');
-        }
-      }
-    } catch (textError) {
-      console.error('Error reading file as text:', textError);
-      return NextResponse.json(
-        { error: 'Failed to read file contents' },
-        { status: 500 }
-      );
-    }
-    
-    // Clean up the text
-    extractedText = extractedText
-      .replace(/\s+/g, ' ')  // Replace multiple spaces with a single space
-      .trim();               // Remove leading/trailing whitespace
-    
-    // Limit text length for performance
-    const maxLength = 10000;
-    if (extractedText.length > maxLength) {
-      extractedText = extractedText.substring(0, maxLength) + "...";
-    }
-    
+
+    // Fetch file as array buffer and convert to base64
+    const fileBuffer = await file.arrayBuffer();
+    const base64Data = Buffer.from(fileBuffer).toString("base64");
+
+    // Use Gemini's OCR summarization via the GoogleGenerativeAI SDK
+    const result = await model.generateContent([
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType: file.type,
+        },
+      },
+      'Summarize this document including critical details.',
+    ]);
+
+    // Assuming the response returns the summarized text via result.response.text()
+    const summary = result.response.text();
+
     return NextResponse.json({
       success: true,
-      text: extractedText,
+      summary,
       fileName: file.name,
       fileType: file.type,
-      fileSize: file.size
+      fileSize: file.size,
     });
-    
   } catch (error: any) {
     console.error('Error processing resume:', error);
     return NextResponse.json(

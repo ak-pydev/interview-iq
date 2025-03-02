@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   try {
     // Initialize Gemini SDK
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-pro-exp-02-05" });
 
     // Parse the request body with type checking
     const body: RequestBody = await request.json();
