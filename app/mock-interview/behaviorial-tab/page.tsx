@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   Upload,
   FileText,
@@ -25,6 +26,8 @@ import {
 export default function BehavioralInterviewTab() {
   const router = useRouter();
   const [activeView, setActiveView] = useState('setup');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   // All form fields are now required
   const [companyName, setCompanyName] = useState('');
@@ -93,26 +96,77 @@ export default function BehavioralInterviewTab() {
     setJobDescription('');
     setUserQuestions(['']);
     setSelectedMode('standard');
+    setErrorMessage('');
   };
 
   // When "Start Behavioral Interview" is clicked, validate required fields
   // and store the setup data (here in localStorage) for use in the interview session.
-  const startInterview = () => {
+  const startInterview = async () => {
     if (!companyName.trim() || !selectedRole.trim() || !jobDescription.trim()) {
-      alert("Please fill in all required fields: Company Name, Target Role, and Job Description.");
+      setErrorMessage("Please fill in all required fields: Company Name, Target Role, and Job Description.");
       return;
     }
-    const setupData = {
-      companyName,
-      selectedRole,
-      jobDescription,
-      userQuestions,
-      resumeFile: resumeFile ? resumeFile.name : null,
-      selectedMode,
-    };
-    localStorage.setItem("interviewSetup", JSON.stringify(setupData));
-    router.push('/behaviorial-tab/start_int');
+
+    setIsSubmitting(true);
+    setErrorMessage('');
+    
+    try {
+      const setupData = {
+        companyName,
+        selectedRole,
+        jobDescription,
+        userQuestions: userQuestions.filter(q => q.trim() !== ''),
+        resumeFileName: resumeFile ? resumeFile.name : null,
+        selectedMode,
+        timestamp: new Date().toISOString(),
+        status: 'started'
+      };
+      
+      // Save to localStorage
+      localStorage.setItem("interviewSetup", JSON.stringify(setupData));
+      
+      try {
+        // Try to save to database using the correct API path
+        const response = await fetch('/api/uploading/interviews', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(setupData),
+        });
+        
+        if (!response.ok) {
+          console.warn('Warning: Failed to save interview data to database, continuing anyway');
+        }
+      } catch (dbError) {
+        console.error('Error saving to database:', dbError);
+        // Continue even if database save fails
+      }
+      
+      // Navigate to interview page with correct spelling
+      console.log('Navigating to interview page...');
+      router.push('/behavioral-tab/start_int');
+      
+      // Fallback navigation with delay
+      setTimeout(() => {
+        console.log('Fallback navigation triggered');
+        window.location.href = '/behavioral-tab/start_int';
+      }, 1000);
+      
+    } catch (error: any) {
+      console.error('Error during interview setup:', error);
+      setErrorMessage('There was an error starting your interview. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  // Clear any error messages when form fields change
+  useEffect(() => {
+    if (errorMessage) {
+      setErrorMessage('');
+    }
+  }, [companyName, selectedRole, jobDescription]);
 
   const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
   const itemVariants = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { type: "spring", damping: 15, stiffness: 100 } } };
@@ -164,6 +218,18 @@ export default function BehavioralInterviewTab() {
         <AnimatePresence mode="wait">
           {activeView === 'setup' ? (
             <motion.div key="setup" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.3 }}>
+              {/* Error message display */}
+              {errorMessage && (
+                <motion.div 
+                  className="bg-red-900/40 border border-red-500/40 rounded-xl mb-4 p-4 flex items-start space-x-3"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-red-200">{errorMessage}</p>
+                </motion.div>
+              )}
+              
               {/* Quick Tips Section */}
               <motion.div className="bg-indigo-900/30 border border-indigo-500/40 rounded-xl mb-8 overflow-hidden shadow-lg shadow-indigo-900/10" variants={itemVariants}>
                 <div className="flex justify-between items-center p-4 cursor-pointer bg-indigo-900/50" onClick={() => setTipVisible(!tipVisible)}>
@@ -242,7 +308,7 @@ export default function BehavioralInterviewTab() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-indigo-200 mb-2">
-                        Upload Your Resume (Required)
+                        Upload Your Resume (Optional)
                       </label>
                       <div 
                         className="border-2 border-dashed border-indigo-800/50 rounded-xl p-6 cursor-pointer hover:border-indigo-500 transition-colors text-center bg-indigo-950/20"
@@ -367,17 +433,28 @@ export default function BehavioralInterviewTab() {
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={handleResetForm}
+                      disabled={isSubmitting}
                     >
                       Reset Form
                     </motion.button>
                     <motion.button
-                      className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 px-8 py-4 rounded-xl font-bold text-lg shadow-lg flex items-center space-x-2 transition-all"
-                      whileHover={{ scale: 1.05, boxShadow: "0 10px 25px -5px rgba(99, 102, 241, 0.4)" }}
-                      whileTap={{ scale: 0.98 }}
+                      className={`bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 px-8 py-4 rounded-xl font-bold text-lg shadow-lg flex items-center space-x-2 transition-all ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
+                      whileHover={{ scale: isSubmitting ? 1 : 1.05, boxShadow: isSubmitting ? "none" : "0 10px 25px -5px rgba(99, 102, 241, 0.4)" }}
+                      whileTap={{ scale: isSubmitting ? 1 : 0.98 }}
                       onClick={startInterview}
+                      disabled={isSubmitting}
                     >
-                      <span>Start Behavioral Interview</span>
-                      <ArrowRight className="w-5 h-5" />
+                      {isSubmitting ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                          <span>Starting Interview...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Start Behavioral Interview</span>
+                          <ArrowRight className="w-5 h-5" />
+                        </>
+                      )}
                     </motion.button>
                   </div>
                 </div>
@@ -403,7 +480,7 @@ export default function BehavioralInterviewTab() {
                   ))}
                 </ul>
                 <div className="mt-6 text-gray-300 bg-indigo-950/30 p-4 rounded-lg border border-indigo-900/30">
-                  <p>Need help preparing? Check out our <a href="#" className="text-indigo-400 hover:text-indigo-300 underline">interview preparation guide</a> for tips on answering behavioral questions effectively.</p>
+                  <p>Need help preparing? Check out our <Link href="/interview-guide" className="text-indigo-400 hover:text-indigo-300 underline">interview preparation guide</Link> for tips on answering behavioral questions effectively.</p>
                 </div>
               </motion.div>
             </motion.div>

@@ -43,11 +43,11 @@ export default function InterviewPage() {
       } catch (error) {
         console.error("Error parsing interview setup data", error);
         alert("There was an error loading your interview setup. Redirecting to setup.");
-        router.push('/behaviorial-tab');
+        router.push('/behavioral-tab');
       }
     } else {
       alert("No interview setup data found. Redirecting to setup.");
-      router.push('/behaviorial-tab');
+      router.push('/behavioral-tab');
     }
   }, [router]);
 
@@ -166,7 +166,7 @@ export default function InterviewPage() {
       });
       if (!res.ok) throw new Error('Error fetching Gemini response');
       const data = await res.json();
-      return data.response;
+      return data.question || data.response;
     } catch (error) {
       console.error(error);
       return "I'm sorry, something went wrong. Please try again.";
@@ -176,13 +176,20 @@ export default function InterviewPage() {
   // Now the saveMessageToDB function passes the collection name to your API
   const saveMessageToDB = async (message: Message) => {
     try {
-      await fetch('/api/interviews', {
+      await fetch('/api/uploading/interviews', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, collection: "mockinterview-behavior" }),
+        body: JSON.stringify({ 
+          message, 
+          collection: "mockinterview-behavior",
+          timestamp: new Date().toISOString(),
+          type: message.role,
+          content: message.text
+        }),
       });
     } catch (error) {
       console.error('Error saving message to DB', error);
+      // Continue even if saving fails
     }
   };
 
@@ -231,7 +238,7 @@ export default function InterviewPage() {
         {messages.map((msg, index) => (
           <motion.div
             key={index}
-            className={`mb-4 p-3 rounded-lg max-w-md ${msg.role === 'user' ? 'bg-blue-600 self-end' : 'bg-gray-700 self-start'}`}
+            className={`mb-4 p-3 rounded-lg max-w-md ${msg.role === 'user' ? 'bg-blue-600 self-end ml-auto' : 'bg-gray-700 self-start'}`}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
           >
