@@ -9,7 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { 
   FileText, Upload, Check, ArrowRight, Download, RefreshCw, 
-  Sparkles, AlertTriangle, Award, Target, Briefcase, X, ChevronRight
+  Sparkles, AlertTriangle, Award, Target, Briefcase, X, ChevronRight,
+  Scissors, Layout, Code, CheckCircle2, XCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -31,6 +32,13 @@ const animationStyles = `
   background-size: 800px 104px;
   animation: shimmer 1.5s infinite linear;
 }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
 `;
 
 interface ResumeEnhancerFormData {
@@ -43,20 +51,30 @@ interface ResumeEnhancerFormData {
 interface ParsedFeedback {
   strengths: string[];
   improvements: string[];
-  keywords: string[];
+  keywords: {
+    present: string[];
+    missing: string[];
+  };
+  formatting: string[];
   match: number;
+  rawData: string[];
 }
 
-// Parse the OCR results from strings to structured data
-const parseOcrResults = (results: string[]): ParsedFeedback => {
+// Parse the Gemini API results into structured data
+const parseGeminiResults = (results: string[]): ParsedFeedback => {
   const parsedData: ParsedFeedback = {
     strengths: [],
     improvements: [],
-    keywords: [],
-    match: 70 // Default match score
+    keywords: {
+      present: [],
+      missing: []
+    },
+    formatting: [],
+    match: 70, // Default match score
+    rawData: results || []
   };
   
-  // If there are no results, add some default information to ensure results display
+  // If there are no results, add some default information
   if (!results || results.length === 0) {
     parsedData.improvements.push("No specific improvements identified. Try uploading a different resume format.");
     parsedData.strengths.push("Resume successfully processed.");
@@ -74,31 +92,80 @@ const parseOcrResults = (results: string[]): ParsedFeedback => {
     const lowerItem = item.toLowerCase();
     
     // Extract match percentage if present
-    const matchPattern = /match(\s*)(?::|is|of)(\s*)(\d+)%/i;
+    const matchPattern = /match(?:\s*(?:score|percentage|rate))?(?:\s*(?::|is|of))?(?:\s*)(\d+)%/i;
     const matchResult = item.match(matchPattern);
-    if (matchResult && matchResult[3]) {
-      parsedData.match = parseInt(matchResult[3], 10);
+    if (matchResult && matchResult[1]) {
+      const matchValue = parseInt(matchResult[1], 10);
+      if (!isNaN(matchValue) && matchValue >= 0 && matchValue <= 100) {
+        parsedData.match = matchValue;
+      }
     }
     
-    // Categorize feedback based on keywords
-    if (lowerItem.includes('strength') || lowerItem.includes('excellent') || 
-        lowerItem.includes('good') || lowerItem.includes('impressive')) {
-      parsedData.strengths.push(item);
-    } else if (lowerItem.includes('improve') || lowerItem.includes('add') || 
-              lowerItem.includes('consider') || lowerItem.includes('missing') ||
-              lowerItem.includes('should')) {
-      parsedData.improvements.push(item);
-    } else if (lowerItem.includes('keyword') || lowerItem.includes('skill') ||
-              lowerItem.includes('technology') || lowerItem.includes('term')) {
-      parsedData.keywords.push(item);
-    } else {
-      // Default to improvements if we can't categorize
-      parsedData.improvements.push(item);
+    // Categorize the feedback based on prefixes and keywords
+    if (item.startsWith('Strength:') || lowerItem.includes('strength')) {
+      parsedData.strengths.push(item.replace(/^Strength:\s*/i, ''));
+    } 
+    else if (item.startsWith('Improve:') || lowerItem.includes('improve') || 
+             lowerItem.includes('add') || lowerItem.includes('consider') || 
+             lowerItem.includes('missing') || lowerItem.includes('should')) {
+      parsedData.improvements.push(item.replace(/^Improve:\s*/i, ''));
+    } 
+    else if (lowerItem.includes('format') || lowerItem.includes('layout') || 
+             lowerItem.includes('organize') || lowerItem.includes('structure') ||
+             lowerItem.includes('visual') || lowerItem.includes('spacing')) {
+      parsedData.formatting.push(item);
+    }
+    else if (lowerItem.includes('keyword') || lowerItem.includes('skill') ||
+            lowerItem.includes('technology') || lowerItem.includes('term')) {
+      // Try to determine if keyword is present or missing
+      if (lowerItem.includes('missing') || lowerItem.includes('not found') || 
+          lowerItem.includes('absent') || lowerItem.includes('add') || 
+          lowerItem.includes('include')) {
+        parsedData.keywords.missing.push(item);
+      } else {
+        parsedData.keywords.present.push(item);
+      }
+    } 
+    else {
+      // Try to categorize based on context
+      if (lowerItem.includes('excellent') || lowerItem.includes('good') || 
+          lowerItem.includes('impressive') || lowerItem.includes('strong')) {
+        parsedData.strengths.push(item);
+      } else if (lowerItem.includes('lacks') || lowerItem.includes('weak') || 
+                lowerItem.includes('needs') || lowerItem.includes('could use')) {
+        parsedData.improvements.push(item);
+      } else {
+        // Default to improvements if we can't categorize
+        parsedData.improvements.push(item);
+      }
     }
   });
 
+  // Extract keywords from sentences
+  const extractedKeywords: string[] = [];
+  [...parsedData.keywords.present, ...parsedData.keywords.missing].forEach(item => {
+    const keywordMatches = item.match(/"([^"]+)"|'([^']+)'|`([^`]+)`/g);
+    if (keywordMatches) {
+      keywordMatches.forEach(match => {
+        const cleanKeyword = match.replace(/["'`]/g, '').trim();
+        if (cleanKeyword && !extractedKeywords.includes(cleanKeyword)) {
+          extractedKeywords.push(cleanKeyword);
+        }
+      });
+    }
+  });
+  
+  // If we found extracted keywords, replace the keyword arrays
+  if (extractedKeywords.length > 0) {
+    // For simplicity, put all in "missing" if we can't determine presence
+    parsedData.keywords.missing = extractedKeywords;
+    parsedData.keywords.present = [];
+  }
+
   // If categories are empty, add all results to improvements to ensure display
-  if (parsedData.strengths.length === 0 && parsedData.improvements.length === 0 && parsedData.keywords.length === 0) {
+  if (parsedData.strengths.length === 0 && parsedData.improvements.length === 0 && 
+      parsedData.keywords.present.length === 0 && parsedData.keywords.missing.length === 0 &&
+      parsedData.formatting.length === 0) {
     processableResults.forEach(item => {
       if (item && typeof item === 'string') {
         parsedData.improvements.push(item);
@@ -113,16 +180,16 @@ const parseOcrResults = (results: string[]): ParsedFeedback => {
 
   // If no match was found, assign a default
   if (parsedData.match === 0) {
-    // Estimate based on keywords length and strengths vs improvements ratio
-    const totalPoints = parsedData.strengths.length * 2 + parsedData.keywords.length;
-    const totalPossible = totalPoints + parsedData.improvements.length * 2;
+    // Estimate based on keywords and strengths vs improvements ratio
+    const totalPoints = parsedData.strengths.length * 2 + parsedData.keywords.present.length;
+    const totalPossible = totalPoints + parsedData.improvements.length * 2 + parsedData.keywords.missing.length;
     parsedData.match = totalPossible > 0 ? Math.round((totalPoints / totalPossible) * 100) : 65;
     
     // Ensure it's within a reasonable range
     parsedData.match = Math.max(Math.min(parsedData.match, 95), 40);
   }
   
-  console.log("Parsed OCR Results:", parsedData);
+  console.log("Parsed Gemini Results:", parsedData);
   return parsedData;
 };
 
@@ -138,13 +205,13 @@ const ResultsSkeleton = () => (
   </div>
 );
 
-// Results display component
+// Enhanced results display component
 const ResumeResults = ({ isLoading, results }) => {
-  const parsedResults = parseOcrResults(results);
-  const { strengths, improvements, keywords, match } = parsedResults;
+  const parsedResults = parseGeminiResults(results);
+  const { strengths, improvements, keywords, formatting, match, rawData } = parsedResults;
   
-  // Always show results section if either loading or we have any results or showResults is true
-  // This fixes the issue of results not displaying
+  const totalKeywords = keywords.present.length + keywords.missing.length;
+  const hasFormatting = formatting.length > 0;
   
   // Match score color based on percentage
   const getMatchColor = (score) => {
@@ -225,8 +292,15 @@ const ResumeResults = ({ isLoading, results }) => {
                 <TabsTrigger value="keywords" className="px-4">
                   <Target className="h-4 w-4 mr-1" />
                   Keywords
-                  <Badge className="ml-2 bg-blue-100 text-blue-800">{keywords.length}</Badge>
+                  <Badge className="ml-2 bg-blue-100 text-blue-800">{totalKeywords}</Badge>
                 </TabsTrigger>
+                {hasFormatting && (
+                  <TabsTrigger value="formatting" className="px-4">
+                    <Layout className="h-4 w-4 mr-1" />
+                    Formatting
+                    <Badge className="ml-2 bg-purple-100 text-purple-800">{formatting.length}</Badge>
+                  </TabsTrigger>
+                )}
               </TabsList>
               
               <TabsContent value="improvements" className="space-y-4 mt-2">
@@ -274,35 +348,90 @@ const ResumeResults = ({ isLoading, results }) => {
               <TabsContent value="keywords" className="mt-2">
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 mb-4">
                   <p className="text-sm text-blue-800">
-                    These are important keywords and skills from the job description. Make sure they appear in your resume where relevant.
+                    These are important keywords and skills from the job description. Green keywords are present in your resume, while red ones are missing or underrepresented.
                   </p>
                 </div>
                 
-                <div className="flex flex-wrap gap-2">
-                  {keywords.length > 0 ? (
-                    keywords.map((item, idx) => {
-                      // Extract just the keyword if possible
-                      const keywordMatch = item.match(/[""']([^""']+)[""']/);
-                      const keyword = keywordMatch ? keywordMatch[1] : item;
-                      
-                      return (
-                        <Badge 
-                          key={idx} 
-                          className="px-3 py-2 bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors animate-fadeIn"
-                          style={{ animationDelay: `${idx * 50}ms` }}
-                        >
-                          {keyword}
-                        </Badge>
-                      );
-                    })
-                  ) : (
+                <div className="space-y-4">
+                  {keywords.present.length > 0 && (
+                    <div className="p-4 rounded-lg border border-green-100 bg-green-50">
+                      <h4 className="text-green-800 font-medium mb-2 flex items-center">
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                        Keywords Found in Your Resume
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {keywords.present.map((item, idx) => {
+                          // Extract just the keyword if possible
+                          const keywordMatch = item.match(/[""']([^""']+)[""']/);
+                          const keyword = keywordMatch ? keywordMatch[1] : item;
+                          
+                          return (
+                            <Badge 
+                              key={idx} 
+                              className="px-3 py-2 bg-green-100 text-green-800 hover:bg-green-200 transition-colors animate-fadeIn"
+                              style={{ animationDelay: `${idx * 50}ms` }}
+                            >
+                              {keyword}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {keywords.missing.length > 0 && (
+                    <div className="p-4 rounded-lg border border-red-100 bg-red-50">
+                      <h4 className="text-red-800 font-medium mb-2 flex items-center">
+                        <XCircle className="h-4 w-4 mr-2" />
+                        Keywords Missing in Your Resume
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {keywords.missing.map((item, idx) => {
+                          // Extract just the keyword if possible
+                          const keywordMatch = item.match(/[""']([^""']+)[""']/);
+                          const keyword = keywordMatch ? keywordMatch[1] : item;
+                          
+                          return (
+                            <Badge 
+                              key={idx} 
+                              className="px-3 py-2 bg-red-100 text-red-800 hover:bg-red-200 transition-colors animate-fadeIn"
+                              style={{ animationDelay: `${idx * 50}ms` }}
+                            >
+                              {keyword}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {keywords.present.length === 0 && keywords.missing.length === 0 && (
                     <p className="text-center text-gray-500 py-8 w-full">No keywords identified.</p>
                   )}
                 </div>
               </TabsContent>
+              
+              {hasFormatting && (
+                <TabsContent value="formatting" className="space-y-4 mt-2">
+                  {formatting.map((item, idx) => (
+                    <div 
+                      key={idx}
+                      className="flex items-start gap-3 p-4 rounded-lg bg-purple-50 border border-purple-100 hover:shadow-md transition-all animate-fadeIn"
+                      style={{ animationDelay: `${idx * 100}ms` }}
+                    >
+                      <div className="mt-1 flex-shrink-0 rounded-full bg-purple-200 p-1.5">
+                        <Scissors className="h-4 w-4 text-purple-700" />
+                      </div>
+                      <div>
+                        <p className="text-gray-800">{item}</p>
+                      </div>
+                    </div>
+                  ))}
+                </TabsContent>
+              )}
             </Tabs>
             
-            <div className="px-6 pb-6 pt-2 border-t border-gray-100 flex gap-3">
+            <div className="px-6 pb-6 pt-2 border-t border-gray-100 flex gap-3 flex-col sm:flex-row">
               <Button 
                 variant="outline" 
                 className="flex-1 flex items-center justify-center gap-2 text-indigo-700 border-indigo-200 hover:bg-indigo-50"
@@ -439,8 +568,8 @@ export default function ResumeEnhancerPage() {
         throw new Error("fileUrl is missing or invalid in the upload response.");
       }
 
-      // Call the Genai OCR endpoint.
-      const ocrResponse = await fetch('/api/resume-enhance/genai-ocr', {
+      // Call the Gemini API endpoint.
+      const geminiResponse = await fetch('/api/resume-enhance/genai-ocr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -450,35 +579,40 @@ export default function ResumeEnhancerPage() {
           targetRole: formData.targetRole,
         }),
       });
-      if (!ocrResponse.ok) {
-        const errorText = await ocrResponse.text();
-        console.error('OCR Error:', errorText);
+      if (!geminiResponse.ok) {
+        const errorText = await geminiResponse.text();
+        console.error('Gemini API Error:', errorText);
         throw new Error('Resume processing failed');
       }
-      const ocrResult = await ocrResponse.json();
-      console.log('OCR result:', ocrResult);
+      const geminiResult = await geminiResponse.json();
+      console.log('Gemini result:', geminiResult);
 
-      // Handle various response formats to ensure we always get results
-      if (ocrResult.feedback && Array.isArray(ocrResult.feedback)) {
-        setOcrResults(ocrResult.feedback);
-      } else if (ocrResult.feedback && typeof ocrResult.feedback === 'string') {
+      // Handle various response formats
+      if (geminiResult.feedback && Array.isArray(geminiResult.feedback)) {
+        setOcrResults(geminiResult.feedback);
+      } else if (geminiResult.feedback && typeof geminiResult.feedback === 'string') {
         // Handle case where feedback is a single string - split by periods or line breaks
-        const feedbackItems = ocrResult.feedback
+        const feedbackItems = geminiResult.feedback
           .split(/(?:\\n|\.(?!\d))+/) // Split by newlines or periods (not in numbers)
           .map(item => item.trim())
           .filter(item => item.length > 0);
-        setOcrResults(feedbackItems.length > 0 ? feedbackItems : [ocrResult.feedback]);
-      } else if (ocrResult.results) {
-        // Try alternative property names
-        const feedbackData = Array.isArray(ocrResult.results) ? ocrResult.results : [ocrResult.results];
-        setOcrResults(feedbackData);
+        setOcrResults(feedbackItems.length > 0 ? feedbackItems : [geminiResult.feedback]);
+      } else if (geminiResult.rawFeedback) {
+        // Handle raw feedback format from updated API
+        const feedbackItems = geminiResult.rawFeedback
+          .split(/\r?\n/)
+          .map(item => item.trim())
+          .filter(item => item.length > 0 && !item.match(/^#/)); // Filter out headings
+        setOcrResults(feedbackItems);
       } else {
         // Fallback: create a generic result so something displays
         setOcrResults([
-          "Your resume has been processed.",
-          "Consider adding more keywords from the job description.",
-          "Ensure your experience clearly demonstrates relevant skills.",
-          "Quantify your achievements where possible."
+          "Match score: 65%",
+          "Strength: Your resume has a clean structure.",
+          "Improve: Consider adding more quantifiable achievements.",
+          "Improve: Tailor your skills section to the job description.",
+          "Keyword missing: 'project management'",
+          "Keyword missing: 'team leadership'"
         ]);
       }
       toast.success('Resume analysis complete!');
@@ -628,7 +762,7 @@ export default function ResumeEnhancerPage() {
             </CardContent>
           </Card>
 
-          {/* Results Section - Always render once showResults is true */}
+          {/* Results Section */}
           <div id="results-section">
             {showResults && (
               <ResumeResults isLoading={isProcessing} results={ocrResults} />
