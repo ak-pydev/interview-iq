@@ -1,99 +1,111 @@
-// File: app/api/gemini/route.ts
-
 import { NextResponse } from 'next/server';
+import dotenv from "dotenv";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// Configure dotenv
+dotenv.config();
+
+// Type definitions for improved type safety
+interface ConversationMessage {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+interface RequestBody {
+  conversation: ConversationMessage[];
+  interviewContext: string;
+  tone?: string;
+  timeLimit?: number;
+}
+
+// Fallback interview question
+const FALLBACK_QUESTION = "Could you tell me about a challenging situation you've faced in your career and how you handled it?";
 
 export async function POST(request: Request) {
-  // Check for Gemini API key
+  // Validate Gemini API key
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   
   if (!GEMINI_API_KEY) {
     console.error("GEMINI_API_KEY is not defined in environment variables");
     return NextResponse.json(
-      { error: "Gemini API key is missing" },
+      { error: "API key is missing" },
       { status: 500 }
     );
   }
 
   try {
-    // Parse the request body
-    const requestData = await request.json();
-    const { conversation, interviewContext, tone, timeLimit } = requestData;
+    // Initialize Gemini SDK
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+
+    // Parse the request body with type checking
+    const body: RequestBody = await request.json();
     
     // Validate required fields
-    if (!interviewContext || !conversation) {
+    if (!body.interviewContext) {
       return NextResponse.json(
-        { error: "Missing required fields: interviewContext or conversation" },
+        { error: "interviewContext is required" },
         { status: 400 }
       );
     }
 
-    // Construct proper prompt with formatting for Gemini
-    const promptContent = [
-      {
-        parts: [
-          {
-            text: `Interview Context: ${interviewContext}\n\n` +
-                  `Conversation so far: ${JSON.stringify(conversation)}\n\n` +
-                  `Instructions: Based on the context and conversation history, ask a relevant behavioral interview question in a ${tone || 'casual, friendly'} tone. ` +
-                  `The candidate should be able to answer this question within ${timeLimit || 5} minutes.`
-          }
-        ]
-      }
-    ];
-
-    // Call Gemini API
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + GEMINI_API_KEY,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          contents: promptContent,
-          generationConfig: {
-            temperature: 0.7,
-            topP: 0.8,
-            topK: 40,
-            maxOutputTokens: 1024,
-          }
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+    if (!Array.isArray(body.conversation)) {
+      return NextResponse.json(
+        { error: "Conversation must be an array" },
+        { status: 400 }
+      );
     }
     
-    const data = await response.json();
+    // Log processing details
+    console.log("Processing Gemini request with context length:", body.interviewContext.length);
     
-    // Extract the text from the Gemini response structure
-    if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-      // Extract text from each part and combine
-      const textParts = data.candidates[0].content.parts
-        .filter((part) => part.text)
-        .map((part) => part.text);
-      
-      const generatedText = textParts.join(' ');
-      
-      // Record this in the database if needed
-      // (This part could be added later)
-      
+    // Format conversation for Gemini
+    const formattedConversation = body.conversation.length > 0
+      ? body.conversation.map(msg => `${msg.role}: ${msg.text}`).join('\n')
+      : "No previous messages";
+    
+    // Construct prompt for Gemini
+    const prompt = `Interview Context: ${body.interviewContext}\n\n` +
+      `Conversation so far: ${formattedConversation}\n\n` +
+      `Instructions: Generate a behavioral interview question based on the context and conversation. ` +
+      `Tone: ${body.tone || 'casual, friendly'}, Time Limit: ${body.timeLimit || 5} minutes. ` +
+      `Ensure the question is relevant, concise, and allows for a meaningful response. ` +
+      `If this is the first question, make it an introductory question about the candidate's background related to the role.`;
+
+    // Generate content using Gemini SDK
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const generatedText = response.text();
+    
+    // Return generated question
+    if (generatedText) {
       return NextResponse.json({ 
         success: true, 
-        question: generatedText
+        question: generatedText.trim()
       });
     } else {
-      throw new Error('Unexpected response format from Gemini API');
+      console.error("Failed to generate a question");
+      
+      return NextResponse.json(
+        { 
+          success: false,
+          error: "Unable to generate a question",
+          question: FALLBACK_QUESTION
+        },
+        { status: 500 }
+      );
     }
 
-  } catch (error) {
+  } catch (error: any) {
+    // Comprehensive error handling
     console.error("Error generating interview question:", error);
     
-    // Return error response
     return NextResponse.json(
-      { error: error.message || "Failed to generate interview question" },
+      { 
+        success: false,
+        error: error.message || "Failed to generate interview question",
+        question: FALLBACK_QUESTION
+      },
       { status: 500 }
     );
   }

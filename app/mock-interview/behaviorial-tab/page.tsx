@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import {
   Upload,
@@ -15,7 +15,6 @@ import {
   Edit,
   ArrowRight,
   Clock,
-  Calendar,
   CheckCircle,
   Sparkles,
   AlertCircle,
@@ -23,13 +22,35 @@ import {
   ExternalLink
 } from 'lucide-react';
 
+// TypeScript interfaces for SpeechRecognition API
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+  resultIndex: number;
+}
+
+interface SpeechRecognition extends EventTarget {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  start(): void;
+  stop(): void;
+  onresult: (event: SpeechRecognitionEvent) => void;
+  onend: () => void;
+}
+
+interface Message {
+  role: 'user' | 'interviewer';
+  text: string;
+  timestamp: string;
+}
+
 export default function BehavioralInterviewTab() {
   const router = useRouter();
   const [activeView, setActiveView] = useState('setup');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // All form fields are now required
+  // Required form fields
   const [companyName, setCompanyName] = useState('');
   const [selectedRole, setSelectedRole] = useState('');
   const [resumeFile, setResumeFile] = useState<File | null>(null);
@@ -39,6 +60,7 @@ export default function BehavioralInterviewTab() {
   const [activeTip, setActiveTip] = useState(0);
   const resumeInputRef = useRef<HTMLInputElement>(null);
 
+  // Interview mode selection
   const interviewModes = [
     { id: 'beginner', name: 'Beginner Mode', description: 'Gentle feedback with guiding questions', color: 'bg-emerald-900/30 border-emerald-500/30' },
     { id: 'standard', name: 'Standard Mode', description: 'Balanced challenge and support', color: 'bg-blue-900/30 border-blue-500/30' },
@@ -46,6 +68,7 @@ export default function BehavioralInterviewTab() {
   ];
   const [selectedMode, setSelectedMode] = useState('standard');
 
+  // Quick tips
   const tips = [
     { 
       title: "Use the STAR Method", 
@@ -65,14 +88,14 @@ export default function BehavioralInterviewTab() {
     }
   ];
 
-  // (History section omitted here for brevity.)
-
+  // Handle file change
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>, setFile: React.Dispatch<React.SetStateAction<File | null>>) => {
     if (event.target.files && event.target.files[0]) {
       setFile(event.target.files[0]);
     }
   };
 
+  // Manage dynamic question fields
   const handleAddQuestion = () => {
     setUserQuestions([...userQuestions, '']);
   };
@@ -89,6 +112,7 @@ export default function BehavioralInterviewTab() {
     }
   };
 
+  // Reset the form
   const handleResetForm = () => {
     setCompanyName('');
     setSelectedRole('');
@@ -99,8 +123,31 @@ export default function BehavioralInterviewTab() {
     setErrorMessage('');
   };
 
-  // When "Start Behavioral Interview" is clicked, validate required fields
-  // and store the setup data (here in localStorage) for use in the interview session.
+  // Extract text from resume file
+  const extractTextFromFile = async (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          if (event.target?.result) {
+            resolve(event.target.result.toString());
+          } else {
+            resolve('');
+          }
+        } catch (error) {
+          console.error('Error extracting text from file:', error);
+          resolve('');
+        }
+      };
+      reader.onerror = () => {
+        console.error('Error reading file');
+        resolve('');
+      };
+      reader.readAsText(file);
+    });
+  };
+
+  // Start Interview: validate fields, process resume, and store setup data
   const startInterview = async () => {
     if (!companyName.trim() || !selectedRole.trim() || !jobDescription.trim()) {
       setErrorMessage("Please fill in all required fields: Company Name, Target Role, and Job Description.");
@@ -111,48 +158,57 @@ export default function BehavioralInterviewTab() {
     setErrorMessage('');
     
     try {
+      let resumeText = "";
+      let resumeContentType = "";
+      
+      if (resumeFile) {
+        console.log("Processing resume file:", resumeFile.name);
+        resumeContentType = resumeFile.type;
+        if (resumeFile.type === 'text/plain' || resumeFile.name.endsWith('.txt')) {
+          resumeText = await extractTextFromFile(resumeFile);
+          console.log("Successfully extracted text from file");
+        } else {
+          resumeText = `Resume file: ${resumeFile.name}`;
+          console.log("Using filename only for non-text file");
+        }
+        if (resumeText.length > 5000) {
+          resumeText = resumeText.substring(0, 5000) + "...";
+        }
+        console.log(`Resume processed, ${resumeText.length} characters available`);
+      }
+      
       const setupData = {
         companyName,
         selectedRole,
         jobDescription,
         userQuestions: userQuestions.filter(q => q.trim() !== ''),
+        resumeText,
         resumeFileName: resumeFile ? resumeFile.name : null,
+        resumeContentType,
         selectedMode,
         timestamp: new Date().toISOString(),
         status: 'started'
       };
       
-      // Save to localStorage
       localStorage.setItem("interviewSetup", JSON.stringify(setupData));
       
       try {
-        // Try to save to database using the correct API path
         const response = await fetch('/api/uploading/interviews', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(setupData),
         });
-        
         if (!response.ok) {
           console.warn('Warning: Failed to save interview data to database, continuing anyway');
+        } else {
+          console.log('Interview data saved to database successfully');
         }
       } catch (dbError) {
         console.error('Error saving to database:', dbError);
-        // Continue even if database save fails
       }
       
-      // Navigate to interview page with correct spelling
       console.log('Navigating to interview page...');
       router.push('/behavioral-tab/start_int');
-      
-      // Fallback navigation with delay
-      setTimeout(() => {
-        console.log('Fallback navigation triggered');
-        window.location.href = '/behavioral-tab/start_int';
-      }, 1000);
-      
     } catch (error: any) {
       console.error('Error during interview setup:', error);
       setErrorMessage('There was an error starting your interview. Please try again.');
@@ -161,17 +217,19 @@ export default function BehavioralInterviewTab() {
     }
   };
 
-  // Clear any error messages when form fields change
+  // Clear error when key fields change
   useEffect(() => {
     if (errorMessage) {
       setErrorMessage('');
     }
   }, [companyName, selectedRole, jobDescription]);
 
+  // Variants for Framer Motion
   const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
   const itemVariants = { hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { type: "spring", damping: 15, stiffness: 100 } } };
   const tipContainerVariants = { hidden: { height: 0, opacity: 0 }, visible: { height: 'auto', opacity: 1, transition: { duration: 0.3 } }, exit: { height: 0, opacity: 0, transition: { duration: 0.3 } } };
 
+  // Tab navigation
   const renderTabNavigation = () => (
     <div className="flex space-x-1 mb-8 border-b border-gray-700">
       <button
@@ -218,7 +276,6 @@ export default function BehavioralInterviewTab() {
         <AnimatePresence mode="wait">
           {activeView === 'setup' ? (
             <motion.div key="setup" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.3 }}>
-              {/* Error message display */}
               {errorMessage && (
                 <motion.div 
                   className="bg-red-900/40 border border-red-500/40 rounded-xl mb-4 p-4 flex items-start space-x-3"
@@ -332,17 +389,20 @@ export default function BehavioralInterviewTab() {
                           <div className="flex flex-col items-center space-y-3">
                             <Upload className="w-10 h-10 text-indigo-500" />
                             <span className="text-indigo-300">Upload your resume</span>
-                            <span className="text-xs text-indigo-400">PDF, DOCX (Max: 5MB)</span>
+                            <span className="text-xs text-indigo-400">Text (.txt) files work best</span>
                           </div>
                         )}
                         <input 
                           type="file" 
                           ref={resumeInputRef}
                           onChange={(e) => handleFileChange(e, setResumeFile)} 
-                          accept=".pdf,.doc,.docx"
+                          accept=".txt,.csv,.doc,.docx"
                           className="hidden" 
                         />
                       </div>
+                      <p className="mt-2 text-xs text-indigo-300">
+                        Plain text format recommended for best results
+                      </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-indigo-200 mb-2">
@@ -485,9 +545,8 @@ export default function BehavioralInterviewTab() {
               </motion.div>
             </motion.div>
           ) : (
-            // Interview History view (omitted for brevity)
             <motion.div key="history" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }}>
-              {/* History content */}
+              {/* Interview History view (omitted for brevity) */}
             </motion.div>
           )}
         </AnimatePresence>
