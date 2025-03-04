@@ -21,7 +21,7 @@ const Footer = () => {
                   <path d="M6 10a1 1 0 0 0-1 1v4a1 1 0 0 1-1 1 2 2 0 0 0 0 4h12a2 2 0 1 0 0-4 1 1 0 0 1-1-1v-4a1 1 0 0 0-1-1"/>
                 </svg>
               </div>
-              <span className="text-xl font-bold">CareerMentorAI</span>
+              <span className="text-xl font-bold">PropelCareer.AI</span>
             </div>
             <p className="text-indigo-200 mb-6">
               Empowering careers through AI-driven guidance, skill development, and personalized mentorship for every step of your professional journey.
