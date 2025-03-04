@@ -21,7 +21,11 @@ const Footer = () => {
                   <path d="M6 10a1 1 0 0 0-1 1v4a1 1 0 0 1-1 1 2 2 0 0 0 0 4h12a2 2 0 1 0 0-4 1 1 0 0 1-1-1v-4a1 1 0 0 0-1-1"/>
                 </svg>
               </div>
+<<<<<<< HEAD
               <span className="text-xl font-bold">PropelCareer.AI</span>
+=======
+              <span className="text-xl font-bold">Hire Flow AI</span>
+>>>>>>> 5c3db7c68406bbc17a2604f2dce0ec7a944cedc9
             </div>
             <p className="text-indigo-200 mb-6">
               Empowering careers through AI-driven guidance, skill development, and personalized mentorship for every step of your professional journey.
