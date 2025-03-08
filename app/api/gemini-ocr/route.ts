@@ -1,101 +1,172 @@
-import { NextResponse } from 'next/server';
-import dotenv from 'dotenv';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { MongoClient, ObjectId } from 'mongodb';
+import { NextRequest, NextResponse } from "next/server";
+import { join } from "path";
+import { readFile } from "fs/promises";
+import { currentUser } from "@clerk/nextjs";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { existsSync } from "fs";
+import path from "path";
+import { MongoClient, ObjectId } from "mongodb";
 
-dotenv.config();
+// MongoDB connection
+const uri = process.env.MONGODB_URI || "";
+const client = new MongoClient(uri);
+const dbName = "resume-enhancer";
 
-const DB_NAME = 'propelcareerdb';
+// Initialize Google Generative AI with API key
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || "");
 
-// Helper function to connect to MongoDB
-async function connectToDatabase() {
-  if (!process.env.MONGODB_URI) {
-    throw new Error("MONGODB_URI is not defined in environment variables");
-  }
-  const client = new MongoClient(process.env.MONGODB_URI);
-  await client.connect();
-  const db = client.db(DB_NAME);
-  return { client, db };
-}
-
-interface ConversationMessage {
-  role: 'user' | 'assistant';
-  text: string;
-}
-
-interface RequestBody {
-  conversation: ConversationMessage[];
-  interviewContext: string;
-  tone?: string;
-  timeLimit?: number;
-}
-
-// Fallback interview question if Gemini returns no response
-const FALLBACK_QUESTION =
-  "Could you tell me about a challenging situation you've faced in your career and how you handled it?";
-
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    // Parse the request payload, expecting a JSON with a "pdfId" property
-    const { pdfId } = await request.json();
-    if (!pdfId) {
-      return NextResponse.json({ error: "pdfId is required" }, { status: 400 });
+    // Get user information
+    const user = await currentUser();
+    if (!user) {
+      return NextResponse.json(
+        { error: "Unauthorized. Please sign in." },
+        { status: 401 }
+      );
     }
 
-    // Connect to MongoDB and fetch the PDF document
-    const { client, db } = await connectToDatabase();
-    const pdfDoc = await db.collection('pdfFiles').findOne({ _id: new ObjectId(pdfId) });
-    if (!pdfDoc || !pdfDoc.fileData) {
-      await client.close();
-      return NextResponse.json({ error: "PDF not found" }, { status: 404 });
+    const userId = user.id;
+
+    // Parse request body
+    const body = await request.json();
+    const { fileId } = body;
+
+    if (!fileId) {
+      return NextResponse.json(
+        { error: "File ID is required." },
+        { status: 400 }
+      );
     }
 
-    // Ensure fileData is a Buffer
-    const pdfBuffer: Buffer = Buffer.isBuffer(pdfDoc.fileData)
-      ? pdfDoc.fileData
-      : pdfDoc.fileData.buffer;
-    const base64Data = pdfBuffer.toString("base64");
+    // Connect to MongoDB
+    await client.connect();
+    const db = client.db(dbName);
+    const resumeFiles = db.collection("resume_files");
 
-    // Instantiate the Gemini client using GoogleGenerativeAI with your API key
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    if (!GEMINI_API_KEY) {
-      console.error("GEMINI_API_KEY is not defined in environment variables");
-      await client.close();
-      return NextResponse.json({ error: "API key is missing" }, { status: 500 });
+    // Find the file in the database
+    const resumeFile = await resumeFiles.findOne({
+      _id: new ObjectId(fileId),
+      userId: userId,
+    });
+
+    await client.close();
+
+    if (!resumeFile) {
+      return NextResponse.json(
+        { error: "File not found or you don't have permission to access it." },
+        { status: 404 }
+      );
     }
-    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-pro-exp-02-05' });
 
-    // Generate content using the Gemini model with inline PDF data and a summarization prompt
+    // Check if the file exists on disk
+    const filePath = resumeFile.filePath;
+    if (!existsSync(filePath)) {
+      return NextResponse.json(
+        { error: "File not found on server." },
+        { status: 404 }
+      );
+    }
+
+    // Read the file
+    const fileBuffer = await readFile(filePath);
+    const fileExtension = path.extname(filePath).toLowerCase();
+    
+    // Extract text from the file
+    let extractedText;
+    
+    if (fileExtension === '.pdf') {
+      // Process PDF using Gemini Vision Pro
+      extractedText = await extractTextFromPDF(fileBuffer);
+    } else if (fileExtension === '.docx' || fileExtension === '.doc') {
+      // Process Word document using appropriate method
+      extractedText = await extractTextFromDoc(fileBuffer, fileExtension);
+    } else {
+      return NextResponse.json(
+        { error: "Unsupported file format." },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({
+      fileId,
+      text: extractedText,
+      status: "success"
+    }, { status: 200 });
+    
+  } catch (error: any) {
+    console.error("Error processing document:", error);
+    return NextResponse.json(
+      { error: "Failed to process document: " + error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// Function to extract text from a PDF using Gemini Vision Pro
+async function extractTextFromPDF(fileBuffer: Buffer): Promise<string> {
+  try {
+    // Convert file buffer to base64
+    const base64Data = fileBuffer.toString('base64');
+    
+    // Initialize the Gemini Pro Vision model
+    const model = genAI.getGenerativeModel({ model: "gemini-pro-vision" });
+    
+    // Create a prompt for the model
+    const prompt = "This is a resume document. Extract all the text content from this image, preserving the structure and formatting as much as possible. Include all sections such as contact information, education, work experience, skills, etc.";
+    
+    // Generate content from the model
     const result = await model.generateContent([
+      prompt,
       {
         inlineData: {
           data: base64Data,
-          mimeType: "application/pdf",
-        },
-      },
-      'Summarize this document, including critical details.',
+          mimeType: "application/pdf"
+        }
+      }
     ]);
+    
+    const response = await result.response;
+    const text = response.text();
+    
+    return text;
+  } catch (error) {
+    console.error("Error in Gemini PDF extraction:", error);
+    throw new Error("Failed to extract text from PDF");
+  }
+}
 
-    // Close the database connection
-    await client.close();
-
-    // Return the summarized text
-    const summary = result.response.text;
-    if (summary && summary.trim().length > 0) {
-      return NextResponse.json({ success: true, summary: summary.trim() });
-    } else {
-      console.error("Gemini model returned an empty response");
-      return NextResponse.json(
-        { success: false, error: "Unable to generate a summary", summary: FALLBACK_QUESTION },
-        { status: 500 }
-      );
-    }
-  } catch (error: any) {
-    console.error("Error in Gemini OCR endpoint:", error);
-    return NextResponse.json(
-      { success: false, error: error.message || "Failed to process request" },
-      { status: 500 }
-    );
+// Function to extract text from a Word document
+async function extractTextFromDoc(fileBuffer: Buffer, fileExtension: string): Promise<string> {
+  try {
+    // Convert file buffer to base64
+    const base64Data = fileBuffer.toString('base64');
+    
+    // Initialize the Gemini Pro Vision model
+    const model = genAI.getGenerativeModel({ model: "gemini-pro-vision" });
+    
+    // Create a prompt for the model
+    const prompt = "This is a resume document. Extract all the text content from this document, preserving the structure and formatting as much as possible. Include all sections such as contact information, education, work experience, skills, etc.";
+    
+    // Generate content from the model
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType: fileExtension === '.docx' 
+            ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            : "application/msword"
+        }
+      }
+    ]);
+    
+    const response = await result.response;
+    const text = response.text();
+    
+    return text;
+  } catch (error) {
+    console.error("Error in Gemini Word extraction:", error);
+    throw new Error("Failed to extract text from Word document");
   }
 }
