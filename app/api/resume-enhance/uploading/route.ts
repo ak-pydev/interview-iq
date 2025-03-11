@@ -1,66 +1,87 @@
-import { NextResponse } from 'next/server';
-import { MongoClient } from 'mongodb';
+import { NextRequest, NextResponse } from "next/server";
+import { currentUser } from "@clerk/nextjs/server";
+import { MongoClient, ObjectId } from "mongodb";
 
-if (!process.env.MONGODB_URI) {
-  throw new Error('Missing MONGODB_URI in environment variables.');
-}
+// MongoDB connection
+const uri = process.env.MONGODB_URI || "";
+const client = new MongoClient(uri);
+const dbName = "propelcareerai-db";
 
-const client = new MongoClient(process.env.MONGODB_URI);
-let clientPromise: Promise<MongoClient>;
-
-if (!global._mongoClientPromise) {
-  global._mongoClientPromise = client.connect();
-}
-clientPromise = global._mongoClientPromise;
-
-export async function POST(request: Request) {
+/**
+ * This route is used to check the status of an ongoing file upload
+ * and can be used by the frontend to display progress for long-running operations
+ */
+export async function GET(request: NextRequest) {
   try {
-    // Parse the incoming form data (multipart/form-data)
-    const formData = await request.formData();
-
-    // Extract expected fields
-    const file = formData.get('file');
-    const jobDescription = formData.get('jobDescription');
-    const companyName = formData.get('companyName');
-    const targetRole = formData.get('targetRole');
-
-    // Validate that all required fields are present.
-    if (!file || !jobDescription || !companyName || !targetRole) {
-      return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 });
+    // Get user information
+    const user = await currentUser();
+    if (!user) {
+      return NextResponse.json(
+        { error: "Unauthorized. Please sign in." },
+        { status: 401 }
+      );
     }
 
-    // Process the file if provided.
-    let fileData: Buffer | null = null;
-    let fileName: string | null = null;
-    if (file instanceof File) {
-      fileName = file.name;
-      const arrayBuffer = await file.arrayBuffer();
-      fileData = Buffer.from(arrayBuffer);
+    const userId = user.id;
+
+    // Get fileId from query parameters
+    const fileId = request.nextUrl.searchParams.get('fileId');
+    
+    if (!fileId) {
+      return NextResponse.json(
+        { error: "File ID is required." },
+        { status: 400 }
+      );
     }
 
-    // Prepare the document to be inserted.
-    const document = {
-      fileData, // Stored as a Buffer. For larger files consider using GridFS.
-      fileName,
-      jobDescription: jobDescription.toString(),
-      companyName: companyName.toString(),
-      targetRole: targetRole.toString(),
-      createdAt: new Date(),
-    };
+    // Connect to MongoDB
+    await client.connect();
+    const db = client.db(dbName);
+    const resumeFiles = db.collection("resume_files");
+    const resumeAnalyses = db.collection("resume_analyses");
 
-    // Connect to the database and insert the document.
-    const client = await clientPromise;
-    const db = client.db('propelcareerdb');
-    const collection = db.collection('resume-enhancedb');
-    const result = await collection.insertOne(document);
+    // Check if file exists in database
+    const file = await resumeFiles.findOne({
+      _id: new ObjectId(fileId),
+      userId
+    });
 
-    // Generate a file URL based on the inserted document's id.
-    // Adjust the URL pattern to match your application's routing.
-    const fileUrl = `/api/resume-enhance/files/${result.insertedId}`;
+    if (!file) {
+      await client.close();
+      return NextResponse.json(
+        { error: "File not found or still uploading." },
+        { status: 404 }
+      );
+    }
 
-    return NextResponse.json({ success: true, fileUrl });
-  } catch (error: any) {
-    console.error('Error uploading resume enhancement response:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    // Check if analysis exists for this file
+    const analysis = await resumeAnalyses.findOne({
+      fileId: new ObjectId(fileId)
+    });
+
+    await client.close();
+
+    let status = "uploaded"; // Default status if file exists but no analysis yet
+    
+    if (analysis) {
+      status = "analyzed";
+    }
+
+    return NextResponse.json({
+      fileId,
+      status,
+      file: {
+        name: file.originalName,
+        uploadDate: file.uploadDate
+      }
+    }, { status: 200 });
+    
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    console.error("Error checking upload status:", error);
+    return NextResponse.json(
+      { error: "Failed to check upload status: " + errorMessage },
+      { status: 500 }
+    );
   }
 }

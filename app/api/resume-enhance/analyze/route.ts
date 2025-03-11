@@ -6,7 +6,7 @@ import { MongoClient, ObjectId } from "mongodb";
 // MongoDB connection
 const uri = process.env.MONGODB_URI || "";
 const client = new MongoClient(uri);
-const dbName = "resume-enhancer";
+const dbName = "propelcareerai-db";
 
 // Initialize Google Generative AI with API key
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || "");
@@ -117,7 +117,7 @@ async function analyzeResumeWithGemini(
 ): Promise<string> {
   try {
     // Initialize the Gemini Pro model
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     
     // Create a prompt for the model
     const prompt = `

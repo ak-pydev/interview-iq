@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { join } from "path";
 import { mkdir, writeFile } from "fs/promises";
 import { v4 as uuidv4 } from "uuid";
-import { getAuth } from "@clerk/nextjs/server";
+import { currentUser } from "@clerk/nextjs/server";
 import { MongoClient } from "mongodb";
 
 // MongoDB connection
 const uri = process.env.MONGODB_URI || "";
 const client = new MongoClient(uri);
-const dbName = "resume-enhancer";
+const dbName = "propelcareerai-db";
 
 // Define allowed file types
 const allowedFileTypes = [
@@ -23,13 +23,15 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 export async function POST(request: NextRequest) {
   try {
     // Get user information
-    const { userId } = getAuth(request);
-    if (!userId) {
+    const user = await currentUser();
+    if (!user) {
       return NextResponse.json(
         { error: "Unauthorized. Please sign in." },
         { status: 401 }
       );
     }
+
+    const userId = user.id;
 
     // Parse form data from the request
     const formData = await request.formData();

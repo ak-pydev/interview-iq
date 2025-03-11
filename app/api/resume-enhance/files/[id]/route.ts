@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { join } from "path";
 import { readFile } from "fs/promises";
 import { currentUser } from "@clerk/nextjs/server";
 import { MongoClient, ObjectId } from "mongodb";
@@ -8,7 +9,7 @@ import path from "path";
 // MongoDB connection
 const uri = process.env.MONGODB_URI || "";
 const client = new MongoClient(uri);
-const dbName = "resume-enhancer";
+const dbName = "propelcareerai-db";
 
 export async function GET(
   request: NextRequest,
@@ -42,7 +43,7 @@ export async function GET(
     // Fetch file metadata from the database
     const fileMetadata = await resumeFiles.findOne({
       _id: new ObjectId(fileId),
-      userId: userId
+      userId
     });
 
     await client.close();
@@ -55,7 +56,7 @@ export async function GET(
     }
 
     // Find the file path
-    const filePath = fileMetadata.filePath;
+    const filePath = fileMetadata.filePath as string;
     if (!existsSync(filePath)) {
       return NextResponse.json(
         { error: "File not found on server." },
@@ -68,7 +69,7 @@ export async function GET(
     
     // Get the file extension and set appropriate content type
     const fileExtension = path.extname(filePath).toLowerCase();
-    let contentType;
+    let contentType: string;
     
     switch (fileExtension) {
       case '.pdf':
@@ -92,10 +93,11 @@ export async function GET(
       },
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
     console.error("Error retrieving file:", error);
     return NextResponse.json(
-      { error: "Failed to retrieve file: " + error.message },
+      { error: "Failed to retrieve file: " + errorMessage },
       { status: 500 }
     );
   }
@@ -134,7 +136,7 @@ export async function DELETE(
     // Ensure the file belongs to the user
     const file = await resumeFiles.findOne({
       _id: new ObjectId(fileId),
-      userId: userId
+      userId
     });
 
     if (!file) {
@@ -162,10 +164,11 @@ export async function DELETE(
       status: "success"
     }, { status: 200 });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
     console.error("Error deleting file:", error);
     return NextResponse.json(
-      { error: "Failed to delete file: " + error.message },
+      { error: "Failed to delete file: " + errorMessage },
       { status: 500 }
     );
   }

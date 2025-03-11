@@ -1,392 +1,214 @@
-<<<<<<< HEAD
-import { NextRequest, NextResponse } from 'next/server';
-import { MongoClient, ObjectId } from 'mongodb';
-import { getAuth } from '@clerk/nextjs/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { NextRequest, NextResponse } from "next/server";
+import { join } from "path";
+import { readFile } from "fs/promises";
+import { currentUser } from "@clerk/nextjs/server";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { existsSync } from "fs";
+import path from "path";
+import { MongoClient, ObjectId } from "mongodb";
 
-// Augment the NodeJS global type to include our cached promise.
-declare global {
-  var _mongoClientPromise: Promise<MongoClient> | undefined;
-}
+// MongoDB connection
+const uri = process.env.MONGODB_URI || "";
+const client = new MongoClient(uri);
+const dbName = "propelcareerai-db"; // Using the correct database name
 
-if (!process.env.MONGODB_URI) {
-  throw new Error('Missing MONGODB_URI in environment variables.');
-}
-
-const client = new MongoClient(process.env.MONGODB_URI);
-let clientPromise: Promise<MongoClient>;
-
-if (process.env.NODE_ENV === 'development') {
-  if (!global._mongoClientPromise) {
-    global._mongoClientPromise = client.connect();
-  }
-  clientPromise = global._mongoClientPromise;
-} else {
-  clientPromise = client.connect();
-}
-
-interface AnalyzeRequest {
-  userId: string;
-  fileUrl: string;
-  jobDescription: string;
-  companyName: string;
-  targetRole: string;
-}
+// Initialize Google Generative AI with API key
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || "");
 
 export async function POST(request: NextRequest) {
   try {
-    // Retrieve the authenticated user ID from Clerk.
-    const { userId } = getAuth(request);
-    if (!userId) {
-      return NextResponse.json({ error: "User not authenticated" }, { status: 401 });
+    console.log("OCR route started");
+    
+    // Get user information
+    const user = await currentUser();
+    if (!user) {
+      console.log("Authentication failed: No user ID");
+      return NextResponse.json(
+        { error: "Unauthorized. Please sign in." },
+        { status: 401 }
+      );
     }
 
-    // Parse the request body.
-    const body: AnalyzeRequest = await request.json();
-    const { fileUrl, jobDescription, companyName, targetRole } = body;
-    if (!fileUrl || !jobDescription || !companyName || !targetRole) {
-      return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 });
-    }
+    const userId = user.id;
 
-    // Use the URL constructor to extract the file ID robustly.
-    const urlObj = new URL(fileUrl, request.url);
-    const pathSegments = urlObj.pathname.split('/');
-    const fileId = pathSegments[pathSegments.length - 1];
+    // Parse request body
+    const body = await request.json();
+    const { fileId } = body;
+
+    console.log("Processing file ID:", fileId);
+
     if (!fileId) {
-      return NextResponse.json({ error: 'Invalid file URL' }, { status: 400 });
+      return NextResponse.json(
+        { error: "File ID is required." },
+        { status: 400 }
+      );
     }
 
-    // Connect to the database.
-    const client = await clientPromise;
-    const db = client.db('propelcareerai-db');
+    // Connect to MongoDB
+    await client.connect();
+    const db = client.db(dbName);
+    const resumeFiles = db.collection("resume_files");
 
-    // Retrieve the file document from the uploads collection.
-    const uploadsCollection = db.collection('resume-enhancer-uploads');
-    const fileDoc = await uploadsCollection.findOne({ 
+    console.log("Connected to MongoDB, looking for file");
+
+    // Find the file in the database
+    const resumeFile = await resumeFiles.findOne({
       _id: new ObjectId(fileId),
       userId
     });
-    if (!fileDoc) {
-      return NextResponse.json({ error: 'File not found' }, { status: 404 });
+
+    await client.close();
+
+    if (!resumeFile) {
+      console.log("File not found in database");
+      return NextResponse.json(
+        { error: "File not found or you don't have permission to access it." },
+        { status: 404 }
+      );
     }
 
-    // Convert file data to Base64.
-    const fileBuffer = fileDoc.fileData.buffer ? fileDoc.fileData.buffer : fileDoc.fileData;
-    const fileBase64 = Buffer.from(fileBuffer).toString('base64');
+    console.log("File found in database:", resumeFile._id.toString());
 
-    // Determine MIME type based on the file extension.
-    const fileExtension = fileUrl.split('.').pop()?.toLowerCase();
-    let mimeType = "application/pdf"; // Default.
-=======
-import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+    // Check if the file exists on disk
+    const filePath = resumeFile.filePath;
+    if (!existsSync(filePath)) {
+      console.log("File not found on disk at path:", filePath);
+      return NextResponse.json(
+        { error: "File not found on server." },
+        { status: 404 }
+      );
+    }
 
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const { fileUrl, jobDescription, companyName, targetRole } = body;
+    console.log("File exists on disk, reading file");
+
+    // Read the file
+    const fileBuffer = await readFile(filePath);
+    const fileExtension = path.extname(filePath).toLowerCase();
     
-    if (!fileUrl || typeof fileUrl !== 'string') {
-      return NextResponse.json(
-        { error: "fileUrl is required and must be a string." },
-        { status: 400 }
-      );
-    }
-
-    if (!jobDescription) {
-      return NextResponse.json(
-        { error: "Job description is required for proper analysis." },
-        { status: 400 }
-      );
-    }
-
-    // Convert the relative URL to an absolute URL using the current request's URL as base.
-    const absoluteUrl = new URL(fileUrl, request.url).toString();
-    console.log("Absolute file URL:", absoluteUrl);
-
-    // Fetch the file from the absolute URL.
-    const fileRes = await fetch(absoluteUrl);
-    console.log("Fetch file response status:", fileRes.status);
-    if (!fileRes.ok) {
-      const errText = await fileRes.text();
-      console.error("Error fetching file:", errText);
-      return NextResponse.json(
-        { error: "Failed to fetch the PDF file from fileUrl." },
-        { status: 400 }
-      );
-    }
-    const arrayBuffer = await fileRes.arrayBuffer();
-    const fileBase64 = Buffer.from(arrayBuffer).toString('base64');
-
-    // Determine file type from URL or response headers
-    const fileExtension = fileUrl.split('.').pop()?.toLowerCase();
-    let mimeType = "application/pdf"; // Default to PDF
+    console.log("File read successfully, file extension:", fileExtension);
+    console.log("File size:", fileBuffer.length, "bytes");
     
->>>>>>> 5c3db7c68406bbc17a2604f2dce0ec7a944cedc9
-    if (fileExtension === 'docx') {
-      mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-    } else if (fileExtension === 'doc') {
-      mimeType = "application/msword";
-    }
-
-<<<<<<< HEAD
-    // Verify that the Gemini API key is available.
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    if (!geminiApiKey) {
-      return NextResponse.json({ error: "Gemini API key is not configured." }, { status: 500 });
-    }
-
-    // Initialize Gemini generative model.
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-pro-exp-02-05' });
-
-    // Build a comprehensive prompt.
-=======
-    const geminiApiKey = process.env.GEMINI_API_KEY;
-    if (!geminiApiKey) {
+    // Extract text from the file
+    let extractedText = "";
+    
+    if (fileExtension === '.pdf') {
+      console.log("Processing PDF file");
+      // Process PDF using Gemini Vision Pro
+      extractedText = await extractTextFromPDF(fileBuffer);
+    } else if (fileExtension === '.docx' || fileExtension === '.doc') {
+      console.log("Processing Word document");
+      // Process Word document using appropriate method
+      extractedText = await extractTextFromDoc(fileBuffer, fileExtension);
+    } else {
+      console.log("Unsupported file format:", fileExtension);
       return NextResponse.json(
-        { error: "Gemini API key is not configured." },
-        { status: 500 }
+        { error: "Unsupported file format." },
+        { status: 400 }
       );
     }
 
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-pro-exp-02-05' });
-
-    // Create a comprehensive prompt for rich resume analysis
->>>>>>> 5c3db7c68406bbc17a2604f2dce0ec7a944cedc9
-    const promptText = `
-I need a detailed analysis of this resume compared to the following job description for a ${targetRole} position at ${companyName}:
-
-JOB DESCRIPTION:
-${jobDescription}
-
-Please provide a comprehensive analysis with the following sections:
-
-1. MATCH PERCENTAGE:
-<<<<<<< HEAD
-   - Calculate an overall match percentage between the resume and job description.
-   - Format as "Match score: X%" where X is a number between 0-100.
-
-2. KEY STRENGTHS:
-   - List 3-5 specific strengths from the resume that align well with the job requirements.
-   - Start each with "Strength:" followed by a clear explanation.
-
-3. IMPROVEMENT AREAS:
-   - Identify 3-5 critical gaps or areas for improvement.
-   - Start each with "Improve:" followed by specific, actionable suggestions.
-   - Be direct and detailed about what should be changed.
-
-4. KEYWORDS ANALYSIS:
-   - Extract 5-10 important keywords from the job description.
-   - Indicate which keywords are present in the resume and which are missing.
-   - For missing keywords, suggest specific ways to incorporate them.
-
-5. FORMATTING SUGGESTIONS:
-   - Evaluate the resume's layout, organization, and visual structure.
-   - Suggest specific improvements to enhance readability and impact.
-
-Format each section with clear bullet points.
-`;
-
-    // Call Gemini API with inline file data and prompt.
-=======
-   - Calculate an overall match percentage between the resume and job description
-   - Format as "Match score: X%" where X is a number between 0-100
-
-2. KEY STRENGTHS:
-   - List 3-5 specific strengths from the resume that align well with the job requirements
-   - Start each with "Strength:" followed by a clear explanation
-
-3. IMPROVEMENT AREAS:
-   - Identify 3-5 critical gaps or areas for improvement
-   - Start each with "Improve:" followed by specific, actionable suggestions
-   - Be direct and detailed about what should be changed
-
-4. KEYWORDS ANALYSIS:
-   - Extract 5-10 important keywords from the job description
-   - Indicate which keywords are present in the resume and which are missing
-   - For missing keywords, suggest specific ways to incorporate them
-
-5. FORMATTING SUGGESTIONS:
-   - Evaluate the resume's layout, organization, and visual structure
-   - Suggest specific improvements to enhance readability and impact
-
-Format each section with clear bullet points. Be specific, actionable, and focused on maximizing the candidate's chances of securing an interview.
-`;
-
-    // Generate the content using the enhanced prompt
->>>>>>> 5c3db7c68406bbc17a2604f2dce0ec7a944cedc9
-    const result = await model.generateContent([
-      {
-        inlineData: {
-          data: fileBase64,
-<<<<<<< HEAD
-          mimeType,
-=======
-          mimeType: mimeType,
->>>>>>> 5c3db7c68406bbc17a2604f2dce0ec7a944cedc9
-        },
-      },
-      promptText,
-    ]);
-
-    if (!result.response || !result.response.text) {
-<<<<<<< HEAD
-      return NextResponse.json({ error: "No feedback received from Gemini." }, { status: 500 });
-    }
-
-    // If the response text is a function, await it.
-    const rawFeedback = typeof result.response.text === 'function'
-      ? await result.response.text()
-      : result.response.text;
-
-    // Parse the raw Gemini response into an array of bullet points.
-    const feedbackArray = parseGeminiResponse(rawFeedback);
-    const matchPercentageParsed = parseMatchScore(rawFeedback);
-
-    // Save the analysis into the database.
-    const analysisCollection = db.collection('resume-enhancer-analysis');
-    await analysisCollection.insertOne({
-      userId,
-      fileId,
-      jobDescription,
-      companyName,
-      targetRole,
-      feedback: feedbackArray,
-      matchPercentage: matchPercentageParsed,
-      createdAt: new Date()
-    });
+    console.log("Text extraction completed successfully");
+    console.log("Extracted text length:", extractedText.length);
 
     return NextResponse.json({
-      success: true,
-      feedback: feedbackArray,
-      rawFeedback,
-      matchPercentage: matchPercentageParsed
-    });
-  } catch (error: any) {
-    console.error('Error analyzing resume:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-=======
-      return NextResponse.json(
-        { error: "No feedback received from Gemini." },
-        { status: 500 }
-      );
-    }
-
-    // Process the response to format it for structured display
-    const rawFeedback = result.response.text();
+      fileId,
+      text: extractedText,
+      status: "success"
+    }, { status: 200 });
     
-    // Parse the raw feedback into an array of bullet points
-    const feedbackArray = parseGeminiResponse(rawFeedback);
-
-    return NextResponse.json({ 
-      feedback: feedbackArray,
-      rawFeedback: rawFeedback,
-      analysisDate: new Date().toISOString()
-    });
-  } catch (error: any) {
-    console.error("Error in Gemini feedback endpoint:", error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    const errorStack = error instanceof Error ? error.stack : "No stack trace available";
+    
+    console.error("Detailed OCR error:", error);
+    console.error("Error message:", errorMessage);
+    console.error("Error stack:", errorStack);
+    
     return NextResponse.json(
-      { error: error.message || "An unknown error occurred." },
+      { error: "Failed to process document: " + errorMessage },
       { status: 500 }
     );
->>>>>>> 5c3db7c68406bbc17a2604f2dce0ec7a944cedc9
   }
 }
 
-/**
-<<<<<<< HEAD
- * Extracts common keywords from the given text.
- */
-function extractKeywords(text: string): string[] {
-  const commonKeywords = [
-    "leadership", "teamwork", "communication", "project management",
-    "JavaScript", "TypeScript", "React", "Node.js", "MongoDB",
-    "data analysis", "problem solving", "collaboration", "innovation"
-  ];
-  return commonKeywords.filter(keyword =>
-    text.toLowerCase().includes(keyword.toLowerCase())
-  );
-}
-
-/**
- * Parses the Gemini raw response into an array of bullet points.
- * It normalizes line breaks, removes common bullet markers and numbering,
- * and filters out header-like lines.
- */
-function parseGeminiResponse(rawResponse: string): string[] {
-  const normalized = rawResponse.replace(/\r\n/g, '\n').trim();
-  const lines = normalized.split('\n');
-  const bulletRegex = /^(\s*[-*•]\s+|\s*\d+[\.\)]\s+)?(.*)$/;
-  const bulletPoints: string[] = [];
-
-  for (let line of lines) {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) continue;
-    if (/^[A-Z\s]+:$/.test(trimmedLine)) continue;
-    const match = trimmedLine.match(bulletRegex);
-    if (match) {
-      const content = match[2].trim();
-      if (content.length >= 5) {
-        bulletPoints.push(content);
+// Function to extract text from a PDF using Gemini Vision Pro
+async function extractTextFromPDF(fileBuffer: Buffer): Promise<string> {
+  try {
+    console.log("Starting PDF extraction with Gemini");
+    
+    // Convert file buffer to base64
+    const base64Data = fileBuffer.toString('base64');
+    console.log("Converted PDF to base64, length:", base64Data.length);
+    
+    // Initialize the Gemini Pro Vision model
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    
+    // Create a prompt for the model
+    const prompt = "This is a resume document. Extract all the text content from this image, preserving the structure and formatting as much as possible. Include all sections such as contact information, education, work experience, skills, etc.";
+    
+    console.log("Sending PDF to Gemini AI for processing");
+    
+    // Generate content from the model
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType: "application/pdf"
+        }
       }
-    }
+    ]);
+    
+    const response = await result.response;
+    const text = response.text();
+    
+    console.log("PDF extraction successful");
+    return text;
+  } catch (error) {
+    console.error("Detailed error in Gemini PDF extraction:", error);
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace available");
+    throw new Error("Failed to extract text from PDF: " + (error instanceof Error ? error.message : String(error)));
   }
-  if (bulletPoints.length === 0) {
-    return normalized.split(/[.\n]+/).map(s => s.trim()).filter(s => s.length > 0);
-  }
-  return bulletPoints;
 }
 
-/**
- * Extracts the match score from the Gemini response.
- * Expects a line like "Match score: 70%".
- */
-function parseMatchScore(rawResponse: string): number {
-  const matchPattern = /match score:\s*(\d+)%/i;
-  const match = rawResponse.match(matchPattern);
-  return match && match[1] ? parseInt(match[1], 10) : 65;
-}
-=======
- * Parse the Gemini response into structured format
- * @param rawResponse The raw text response from Gemini
- * @returns Array of bullet points
- */
-function parseGeminiResponse(rawResponse: string): string[] {
-  // Split by line breaks and process
-  const lines = rawResponse.split(/\r?\n/);
-  const bulletPoints: string[] = [];
-  
-  for (let line of lines) {
-    line = line.trim();
+// Function to extract text from a Word document
+async function extractTextFromDoc(fileBuffer: Buffer, fileExtension: string): Promise<string> {
+  try {
+    console.log("Starting Word document extraction with Gemini");
     
-    // Skip empty lines and headers
-    if (!line || line.match(/^#+\s/) || line.match(/^[0-9]+\.\s+[A-Z\s]+:$/)) {
-      continue;
-    }
+    // Convert file buffer to base64
+    const base64Data = fileBuffer.toString('base64');
+    console.log("Converted Word document to base64, length:", base64Data.length);
     
-    // Remove markdown bullet points if present
-    if (line.startsWith('- ')) {
-      line = line.substring(2);
-    } else if (line.startsWith('* ')) {
-      line = line.substring(2);
-    }
+    // Initialize the Gemini Pro Vision model
+    const model = genAI.getGenerativeModel({ model: "gemini-pro-vision" });
     
-    // Remove numbering if present (like "1. ")
-    line = line.replace(/^\d+\.\s+/, '');
+    // Create a prompt for the model
+    const prompt = "This is a resume document. Extract all the text content from this document, preserving the structure and formatting as much as possible. Include all sections such as contact information, education, work experience, skills, etc.";
     
-    // Only add non-empty lines with meaningful content
-    if (line.length > 5) {
-      bulletPoints.push(line);
-    }
+    console.log("Sending Word document to Gemini AI for processing");
+    
+    // Generate content from the model
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType: fileExtension === '.docx' 
+            ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            : "application/msword"
+        }
+      }
+    ]);
+    
+    const response = await result.response;
+    const text = response.text();
+    
+    console.log("Word document extraction successful");
+    return text;
+  } catch (error) {
+    console.error("Detailed error in Gemini Word extraction:", error);
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace available");
+    throw new Error("Failed to extract text from Word document: " + (error instanceof Error ? error.message : String(error)));
   }
-  
-  // If no bullet points were extracted, return the raw response split by line breaks
-  if (bulletPoints.length === 0) {
-    return rawResponse.split(/\r?\n/).filter(line => line.trim().length > 0);
-  }
-  
-  return bulletPoints;
 }
->>>>>>> 5c3db7c68406bbc17a2604f2dce0ec7a944cedc9
