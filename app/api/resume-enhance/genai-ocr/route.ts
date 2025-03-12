@@ -181,7 +181,7 @@ async function extractTextFromDoc(fileBuffer: Buffer, fileExtension: string): Pr
     console.log("Converted Word document to base64, length:", base64Data.length);
     
     // Initialize the Gemini Pro Vision model
-    const model = genAI.getGenerativeModel({ model: "gemini-pro-vision" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     
     // Create a prompt for the model
     const prompt = "This is a resume document. Extract all the text content from this document, preserving the structure and formatting as much as possible. Include all sections such as contact information, education, work experience, skills, etc.";

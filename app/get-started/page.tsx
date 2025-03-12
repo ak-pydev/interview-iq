@@ -24,7 +24,7 @@ export default function GetStartedPage() {
       title: 'Mock Interview',
       description: 'Practice with AI-powered interviews and get real-time feedback',
       icon: <Video className="w-10 h-10 text-emerald-600" />,
-      href: '/mock-interview',
+      href: '/mockinterview',
       color: 'bg-gradient-to-br from-emerald-100 to-emerald-200 hover:from-emerald-200 hover:to-emerald-300',
       borderColor: 'border-emerald-300',
       hoverBg: 'from-emerald-200 to-emerald-300',
